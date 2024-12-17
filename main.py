@@ -94,7 +94,7 @@ def fetch_all_tasks_sorted_by_created():
             {
                 "property": "Due",
                 "date": {
-                    "this_week": today
+                    "on_or_before": today
                 }
             },
             {
@@ -310,7 +310,7 @@ def schedule_single_task(task, current_time, test_mode, deferred_tasks=None):
     print(f"Proposed Start Time (Local): {start_time_local}")
     print(f"Proposed End Time (Local): {end_time_local}")
     print(f"Proposed Time Block: {time_block_minutes} minutes")
-    print("[Y] Apply | [S] Come Back Later | [X] Complete | [C] Complete")
+    print("[Y] Apply | [S] Come Back Later | [X] Deprecated | [C] Complete")
     user_input = input("Your choice: ").strip().upper()
 
     if user_input == "Y":
@@ -334,7 +334,15 @@ def schedule_single_task(task, current_time, test_mode, deferred_tasks=None):
         if deferred_tasks is not None:
             deferred_tasks.append(task)
             logger.info(f"Task: '{task_name}' deferred to the end.")
-    elif user_input in ("X", "C"):
+    elif user_input in ("X"):
+        if not test_mode:
+            update_task(task_id, status="Deprecated", task_name=task_name)
+            logger.info(f"Task: '{task_name}' marked as Done.")
+        else:
+            logger.info(
+                f"[TEST MODE] Task: '{task_name}' would be marked as Done."
+            )
+    elif user_input in ("C"):
         if not test_mode:
             update_task(task_id, status="Done", task_name=task_name)
             logger.info(f"Task: '{task_name}' marked as Done.")
