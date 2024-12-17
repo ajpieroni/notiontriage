@@ -54,7 +54,18 @@ def fetch_all_tasks_sorted_by_priority_created():
                 "timestamp": "created_time",
                 "direction": "ascending"
             }
-        ]
+        ],
+        "filter": {
+            "and": [
+                {"property": "Priority", "status": {"does_not_equal": "Someday"}},
+                {"property": "Status", "status": {"does_not_equal": "Done"}},
+                {"property": "Status", "status": {"does_not_equal": "Handed Off"}},
+                {"property": "Status", "status": {"does_not_equal": "Deprecated"}},
+                {"property": "Status", "status": {"does_not_equal": "Waiting on Reply"}},
+                {"property": "Status", "status": {"does_not_equal": "Waiting on other task"}},
+                {"property": "Done", "checkbox": {"equals": False}},
+            ]
+        },
     }
     response = requests.post(url, headers=headers, json=payload)
     if response.status_code == 200:
@@ -65,16 +76,55 @@ def fetch_all_tasks_sorted_by_priority_created():
 
 
 def fetch_all_tasks_sorted_by_created():
+    today = datetime.datetime.now().date().isoformat()
+    #log today
+    logger.info(f"Today is {today}")
+
     """Fetch all tasks sorted by creation time (oldest to newest)."""
     url = f"https://api.notion.com/v1/databases/{DATABASE_ID}/query"
     payload = {
-        "sorts": [
+    "sorts": [
+        {
+            "timestamp": "created_time",
+            "direction": "ascending"
+        }
+    ],
+    "filter": {
+        "and": [
             {
-                "timestamp": "created_time",
-                "direction": "ascending"
+                "property": "Due",
+                "date": {
+                    "this_week": today
+                }
+            },
+            {
+                "property": "Assigned time",
+                "checkbox": {
+                    "equals": False
+                }
+            },
+            {
+                "property": "Done",
+                "checkbox": {
+                    "equals": False
+                }
+            },
+            {
+                "property": "Priority",
+                "status": {
+                    "does_not_equal": "Someday"
+                }
+            },
+            {
+                "property": "Priority",
+                "status": {
+                    "does_not_equal": "Unassigned"
+                }
             }
         ]
-    }
+    },
+    "page_size": 500
+}
     response = requests.post(url, headers=headers, json=payload)
     if response.status_code == 200:
         return response.json()["results"]
@@ -211,10 +261,20 @@ def triage_unassigned_tasks():
 def schedule_tasks_in_pattern(tasks, test_mode=False, starting_time=None, deferred_tasks=None):
     high_priority_tasks = []
     low_priority_tasks = []
+    print(f"\nYou have {len(tasks)} tasks to schedule.")
 
     for task in tasks:
         props = task.get("properties", {})
         priority = props.get("Priority", {}).get("status", {}).get("name", "Low")
+        done = props.get("Done", {}).get("checkbox", False)
+        task_name = get_task_name(props)
+        print(f"Task: '{task_name}' - Priority: {priority} -- Done: {done}")
+        
+        if done:
+        # Skip triaging this task as it's already done
+            logger.info(f"Task: '{task_name}' is marked as Done. Skipping triage.")
+            continue  # Move to the next task
+
         if priority in ["High", "Must Be Done Today"]:
             high_priority_tasks.append(task)
         else:
