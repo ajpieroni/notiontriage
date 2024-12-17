@@ -89,7 +89,7 @@ def fetch_unassigned_tasks():
     payload = {
         "filter": {
             "and": [
-                {"property": "Status", "status": {"equals": "Unassigned"}}
+                {"property": "Priority", "status": {"equals": "Unassigned"}}
             ]
         }
     }
@@ -147,6 +147,14 @@ def update_task(task_id, start_time=None, end_time=None, task_name=None, priorit
 
 
 def triage_unassigned_tasks():
+    # Mapping from numeric input to priority strings
+    priority_mapping = {
+        "1": "Low",
+        "2": "Medium",
+        "3": "High",
+        "4": "Must Be Done Today"
+    }
+
     unassigned_tasks = fetch_unassigned_tasks()
     for task in unassigned_tasks:
         props = task.get("properties", {})
@@ -154,15 +162,20 @@ def triage_unassigned_tasks():
         task_name = get_task_name(props)
 
         print(f"\nTask: '{task_name}' is currently 'Unassigned'.")
-        print("Please set a priority: (Low/Medium/High/Must Be Done Today)")
-        new_priority = input("Priority: ").strip()
-        if new_priority not in priority_to_time_block:
-            logger.info(f"Skipping '{task_name}' - Invalid priority entered.")
-            continue
+        print("Set a priority by number or 'delete' to deprecate:")
+        print("[1] Low")
+        print("[2] Medium")
+        print("[3] High")
+        print("[4] Must Be Done Today")
+        user_choice = input("Your choice: ").strip().lower()
 
-        # Update the task priority
-        update_task(task_id, task_name=task_name, priority=new_priority)
-
+        if user_choice == "delete":
+            update_task(task_id, task_name=task_name, status="Deprecated")
+        elif user_choice in priority_mapping:
+            chosen_priority = priority_mapping[user_choice]
+            update_task(task_id, task_name=task_name, priority=chosen_priority)
+        else:
+            logger.info(f"Skipping '{task_name}' - Invalid choice entered.")
 
 def schedule_tasks_in_pattern(tasks, test_mode=True):
     # Separate tasks into high priority and low priority based on their Priority
