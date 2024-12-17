@@ -20,9 +20,9 @@ logger = logging.getLogger()
 
 # Priority-to-time-block mapping (in minutes)
 priority_to_time_block = {
-    "Low": 30,
-    "Medium": 60,
-    "High": 120,
+    "Low": 15,
+    "Medium": 30,
+    "High": 60,
     "Must Be Done Today": 120
 }
 
@@ -140,13 +140,19 @@ def create_schedule_day_task():
 
 
 def update_task(task_id, start_time=None, end_time=None, task_name=None, priority=None, status=None):
+    """Update a specific task in Notion with start/end times, priority, or status."""
     url = f"https://api.notion.com/v1/pages/{task_id}"
     payload = {"properties": {}}
 
-    if start_time:
-        payload["properties"]["Start Time"] = {"date": {"start": start_time}}
-    if end_time:
-        payload["properties"]["End Time"] = {"date": {"start": end_time}}
+    if start_time or end_time:
+        # Ensure that at least one of start_time or end_time is provided
+        date_payload = {}
+        if start_time:
+            date_payload["start"] = start_time
+        if end_time:
+            date_payload["end"] = end_time
+        payload["properties"]["Due"] = {"date": date_payload}
+
     if priority:
         payload["properties"]["Priority"] = {"status": {"name": priority}}
     if status:
@@ -202,7 +208,7 @@ def triage_unassigned_tasks():
         else:  # Handle invalid input
             print(f"Invalid choice entered for task '{task_name}'. Please try again.")
 
-def schedule_tasks_in_pattern(tasks, test_mode=True, starting_time=None, deferred_tasks=None):
+def schedule_tasks_in_pattern(tasks, test_mode=False, starting_time=None, deferred_tasks=None):
     high_priority_tasks = []
     low_priority_tasks = []
 
@@ -280,7 +286,7 @@ def schedule_single_task(task, current_time, test_mode, deferred_tasks=None):
         logger.info(f"Skipped Task: '{task_name}' - Invalid choice.")
 
     return end_time
-def assign_dues_and_blocks(test_mode=True):
+def assign_dues_and_blocks(test_mode=False):
     local_now = datetime.datetime.now(LOCAL_TIMEZONE)
     local_now = local_now.replace(second=0, microsecond=0)
 
@@ -307,6 +313,8 @@ def assign_dues_and_blocks(test_mode=True):
     logger.info("Refetching tasks after triage and sorting by creation time.")
     tasks_post_triage = fetch_all_tasks_sorted_by_created()
 
+    print(f"\nYou have {len(tasks_post_triage)} tasks after triage.")
+
     # Pass the pre-computed current_time to schedule_tasks_in_pattern
     schedule_tasks_in_pattern(
         tasks_post_triage,
@@ -315,4 +323,4 @@ def assign_dues_and_blocks(test_mode=True):
         deferred_tasks=deferred_tasks
     )
 if __name__ == "__main__":
-    assign_dues_and_blocks(test_mode=True)
+    assign_dues_and_blocks(test_mode=False)
