@@ -79,7 +79,80 @@ def fetch_all_tasks_sorted_by_priority_created():
         logger.error(f"Failed to fetch tasks. Status Code: {response.status_code}, Response: {response.text}")
         return []
 
+def fetch_current_schedule():
+    today = datetime.datetime.now().date().isoformat()
+    #log today
+    logger.info(f"Today is {today}")
 
+    """Fetch all tasks sorted by creation time (oldest to newest)."""
+    url = f"https://api.notion.com/v1/databases/{DATABASE_ID}/query"
+    payload = {
+    "sorts": [
+        {
+            "timestamp": "created_time",
+            "direction": "ascending"
+        }
+    ],
+    "filter": {
+        "and": [
+            {
+                "property": "Due",
+                "date": {
+                    "on_or_before": today
+                }
+            },
+            {
+                "property": "Assigned time",
+                "checkbox": {
+                    "equals": True
+                }
+            },
+            {
+                "property": "Done",
+                "checkbox": {
+                    "equals": False
+                }
+            },
+            {
+                "property": "Priority",
+                "status": {
+                    "does_not_equal": "Someday"
+                }
+            },
+            {
+                "property": "Priority",
+                "status": {
+                    "does_not_equal": "Unassigned"
+                }
+            }
+        ]
+    },
+    "page_size": 500
+}
+    response = requests.post(url, headers=headers, json=payload)
+    if response.status_code == 200:
+        return response.json()["results"]
+        print(f"You have {len(response.json()['results'])} tasks.")
+    else:
+        logger.error(f"Failed to fetch tasks. Status Code: {response.status_code}, Response: {response.text}")
+        return []
+
+def check_for_overlap(current_schedule, proposed_start, proposed_end):
+    """Check if the proposed time block overlaps with any existing scheduled tasks."""
+    for task in current_schedule:
+        task_properties = task.get("properties", {})
+        task_due = task_properties.get("Due", {}).get("date", {})
+        existing_start = task_due.get("start")
+        existing_end = task_due.get("end")
+
+        if existing_start and existing_end:
+            existing_start = datetime.datetime.fromisoformat(existing_start)
+            existing_end = datetime.datetime.fromisoformat(existing_end)
+
+            # Check if the proposed block overlaps with the existing block
+            if (proposed_start < existing_end) and (proposed_end > existing_start):
+                return True  # Overlap detected
+    return False  # No overlap
 def fetch_all_tasks_sorted_by_created():
     today = datetime.datetime.now().date().isoformat()
     #log today
@@ -263,7 +336,8 @@ def triage_unassigned_tasks():
         else:  # Handle invalid input
             print(f"Invalid choice entered for task '{task_name}'. Please try again.")
 
-def schedule_tasks_in_pattern(tasks, test_mode=False, starting_time=None, deferred_tasks=None):
+    
+def schedule_tasks_in_pattern(tasks, test_mode=False, starting_time=None, deferred_tasks=None, scheduled_task_names=None):
     high_priority_tasks = []
     low_priority_tasks = []
     print(f"\nYou have {len(tasks)} tasks to schedule.")
@@ -273,32 +347,34 @@ def schedule_tasks_in_pattern(tasks, test_mode=False, starting_time=None, deferr
         priority = props.get("Priority", {}).get("status", {}).get("name", "Low")
         done = props.get("Done", {}).get("checkbox", False)
         task_name = get_task_name(props)
-        print(f"Task: '{task_name}' - Priority: {priority} -- Done: {done}")
+        # print(f"Task: '{task_name}' - Priority: {priority} -- Done: {done}")
         
         if done:
         # Skip triaging this task as it's already done
-            logger.info(f"Task: '{task_name}' is marked as Done. Skipping triage.")
+            # logger.info(f"Task: '{task_name}' is marked as Done. Skipping triage.")
             continue  # Move to the next task
 
         if priority in ["High", "Must Be Done Today"]:
             high_priority_tasks.append(task)
+            high_priority_tasks.sort(
+    key=lambda task: task.get("properties", {}).get("Priority", {}).get("status", {}).get("name") != "Must Be Done Today"
+)
         else:
             low_priority_tasks.append(task)
 
     # Use the passed-in starting_time instead of recalculating
     current_time = starting_time if starting_time else datetime.datetime.now(datetime.timezone.utc)
 
-    while high_priority_tasks or low_priority_tasks:
-        if high_priority_tasks:
-            task = high_priority_tasks.pop(0)
-            
-            current_time = schedule_single_task(task, current_time, test_mode)
+    while high_priority_tasks:
+        task = high_priority_tasks.pop(0)
+        current_time = schedule_single_task(task, current_time, test_mode, scheduled_task_names=scheduled_task_names)
 
-        if low_priority_tasks:
-            task = low_priority_tasks.pop(0)
-            current_time = schedule_single_task(task, current_time, test_mode)
+    while low_priority_tasks:
+        task = low_priority_tasks.pop(0)
+        current_time = schedule_single_task(task, current_time, test_mode, scheduled_task_names=scheduled_task_names)
 
-def schedule_single_task(task, current_time, test_mode, deferred_tasks=None):
+def schedule_single_task(task, current_time, test_mode, deferred_tasks=None, scheduled_task_names=None):
+    current_schedule = fetch_current_schedule()  # Get the current schedule
     props = task.get("properties", {})
     task_id = task["id"]
     task_name = get_task_name(props)
@@ -308,9 +384,20 @@ def schedule_single_task(task, current_time, test_mode, deferred_tasks=None):
     start_time = current_time
     end_time = start_time + datetime.timedelta(minutes=time_block_minutes)
 
+        # Shift the scheduling window if overlap is detected
+    while check_for_overlap(current_schedule, start_time, end_time):
+        print(f"⚠️ Overlap detected for task '{task_name}'. Shifting the time window...")
+        start_time = end_time  # Move the start time to the end of the current block
+        end_time = start_time + datetime.timedelta(minutes=time_block_minutes)
+
+
     # Convert times to local timezone for display
     start_time_local = start_time.astimezone(LOCAL_TIMEZONE).strftime("%Y-%m-%d %I:%M %p %Z")
     end_time_local = end_time.astimezone(LOCAL_TIMEZONE).strftime("%Y-%m-%d %I:%M %p %Z")
+
+    if task_name in scheduled_task_names:
+        print(f"🚨 Task '{task_name}' has already been scheduled. Skipping.")
+        return current_time
 
     # Enhanced Print Statements for Clarity
     print(f"\n{'='*50}")
@@ -318,16 +405,18 @@ def schedule_single_task(task, current_time, test_mode, deferred_tasks=None):
     print(f"Proposed Start Time (Local): {start_time_local}")
     print(f"Proposed End Time (Local): {end_time_local}")
     print(f"Proposed Time Block: {time_block_minutes} minutes")
-    print("[Y] Apply | [S] Come Back Later | [X] Deprecated | [C] Complete")
+    print("[Y] Apply | [S] Come Back Later | [X] Deprecated | [C] Complete | [H] High Priority")
     print(f"{'='*50}")
-    
+
+    scheduled_task_names.add(task_name)
+
     # Input validation loop
     while True:
         user_input = input("Your choice: ").strip().upper()
-        if user_input in ["Y", "S", "X", "C"]:
+        if user_input in ["Y", "S", "X", "C", "HIGH"]:
             break
         else:
-            print("Invalid choice. Please enter Y, S, X, or C.")
+            print("Invalid choice. Please enter Y, S, X, HIGH, or C.")
 
     if user_input == "Y":
         # Apply the proposed start and end times
@@ -355,18 +444,20 @@ def schedule_single_task(task, current_time, test_mode, deferred_tasks=None):
         return end_time  # Advance the current_time
 
     elif user_input == "S":
-        print(f"Task '{task_name}' pressed S.")
-        today = datetime.datetime.now().date()
-        # Add one day to today's date (tomorrow)
-        tomorrow = today + datetime.timedelta(days=1)
+        print(f"Task '{task_name}' deferred. Rescheduling for tomorrow.")
+        tomorrow = datetime.datetime.combine(
+            start_time.astimezone(LOCAL_TIMEZONE).date() + datetime.timedelta(days=1),
+            datetime.time.min,
+            tzinfo=LOCAL_TIMEZONE,
+        )
 
-        update_task(
-                    task_id,
-                    start_time=tomorrow.isoformat(),
-                    task_name=task_name,
-                    priority=priority  # Optionally include priority if needed
-                )
-        print(f"Task '{task_name}' has been deferred to tomorrow ({tomorrow}).")
+        if not test_mode:
+            update_task(
+                task_id,
+                start_time=tomorrow.isoformat(),
+                task_name=task_name,
+                priority=priority  # Optionally include priority if needed
+            )
         return current_time  # Do not advance the current_time
 
     elif user_input in ("X", "C"):
@@ -406,6 +497,7 @@ def assign_dues_and_blocks(test_mode=False):
     tasks = fetch_all_tasks_sorted_by_priority_created()
     create_schedule_day_task()
 
+
     # Triage unassigned tasks
     logger.info("Triage unassigned tasks.")
     triage_unassigned_tasks()
@@ -417,13 +509,14 @@ def assign_dues_and_blocks(test_mode=False):
     tasks_post_triage = fetch_all_tasks_sorted_by_created()
 
     print(f"\nYou have {len(tasks_post_triage)} tasks after triage.")
+    scheduled_task_names = set()
 
     # Pass the pre-computed current_time to schedule_tasks_in_pattern
     schedule_tasks_in_pattern(
         tasks_post_triage,
         test_mode=test_mode,
         starting_time=current_time,
-        deferred_tasks=deferred_tasks
+        deferred_tasks=deferred_tasks, scheduled_task_names=scheduled_task_names
     )
 
 if __name__ == "__main__":
