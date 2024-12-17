@@ -163,7 +163,7 @@ def triage_unassigned_tasks():
         "1": "Low",                   # 1 is Low
         "2": "High",                  # 2 is High
         "c": "Deprecated",            # c is Deprecated (mark as archived)
-        "x": "Completed",             # x is Completed (mark as completed)
+        "x": "Done",             # x is Completed (mark as completed)
         "s": "Someday"                # s is Someday (save for later)
     }
 
@@ -180,7 +180,7 @@ def triage_unassigned_tasks():
         print("[1] Low (Minor priority)")
         print("[2] High (Urgent, needs attention soon)")
         print("[c] Deprecated (Mark as archived)")
-        print("[x] Completed (Mark as completed)")
+        print("[x] Done (Mark as completed)")
         print("[s] Someday (Save for later)")
 
         user_choice = input("\nYour choice: ").strip().lower()
@@ -190,8 +190,8 @@ def triage_unassigned_tasks():
             print(f"Task '{task_name}' has been marked as 'Deprecated' and archived.")
         
         elif user_choice == "x":  # Mark as Completed
-            update_task(task_id, task_name=task_name, status="Completed")
-            print(f"Task '{task_name}' has been marked as 'Completed'.")
+            update_task(task_id, task_name=task_name, status="Done")
+            print(f"Task '{task_name}' has been marked as 'Done'.")
         
         elif user_choice in priority_mapping:  # Update priority
             chosen_priority = priority_mapping[user_choice]
@@ -201,10 +201,7 @@ def triage_unassigned_tasks():
         else:  # Handle invalid input
             print(f"Invalid choice entered for task '{task_name}'. Please try again.")
 
-def schedule_tasks_in_pattern(tasks, test_mode=True):
-    # Separate tasks into high priority and low priority based on their Priority
-    # Consider "High" and "Must Be Done Today" as high priority
-    # Consider "Medium" and "Low" as lower priority
+def schedule_tasks_in_pattern(tasks, test_mode=True, starting_time=None):
     high_priority_tasks = []
     low_priority_tasks = []
 
@@ -216,25 +213,17 @@ def schedule_tasks_in_pattern(tasks, test_mode=True):
         else:
             low_priority_tasks.append(task)
 
-    # Get current time and round up to the next 30-minute mark
-    now = datetime.datetime.now(datetime.timezone.utc)
-    current_time = now.replace(second=0, microsecond=0, minute=0) + datetime.timedelta(
-        minutes=(30 - now.minute) % 30
-    )
+    # Use the passed-in starting_time instead of recalculating
+    current_time = starting_time if starting_time else datetime.datetime.now(datetime.timezone.utc)
 
-    # Alternate scheduling between high and low priority tasks
-    # If one list runs out, schedule the remainder of the other list
     while high_priority_tasks or low_priority_tasks:
-        # Take from high priority first if available
         if high_priority_tasks:
             task = high_priority_tasks.pop(0)
             current_time = schedule_single_task(task, current_time, test_mode)
 
-        # Then take from low priority if available
         if low_priority_tasks:
             task = low_priority_tasks.pop(0)
             current_time = schedule_single_task(task, current_time, test_mode)
-
 
 def schedule_single_task(task, current_time, test_mode):
     props = task.get("properties", {})
@@ -256,7 +245,7 @@ def schedule_single_task(task, current_time, test_mode):
     print(f"Proposed Start Time (Local): {start_time_local}")
     print(f"Proposed End Time (Local): {end_time_local}")
     print(f"Proposed Time Block: {time_block_minutes} minutes")
-    user_input = input("Apply these changes? (Y/N/High/Delete): ").strip().upper()
+    user_input = input("Apply these changes? (Y/N/High): ").strip().upper()
 
     if user_input == "Y":
         if not test_mode:
@@ -272,13 +261,6 @@ def schedule_single_task(task, current_time, test_mode):
             logger.info(
                 f"[TEST MODE] Task: '{task_name}' would have its priority set to High."
             )
-    elif user_input == "DELETE":
-        if not test_mode:
-            update_task(task_id, status="Deprecated", task_name=task_name)
-        else:
-            logger.info(
-                f"[TEST MODE] Task: '{task_name}' would be marked as Deprecated."
-            )
     else:
         logger.info(f"Skipped Task: '{task_name}' - User chose not to update.")
 
@@ -286,22 +268,32 @@ def schedule_single_task(task, current_time, test_mode):
 
 
 def assign_dues_and_blocks(test_mode=True):
-    # Fetch initial tasks and create a 'Schedule Day' task
+    local_now = datetime.datetime.now(LOCAL_TIMEZONE)
+    local_now = local_now.replace(second=0, microsecond=0)
+
+    # Round up to the next half hour
+    if local_now.minute < 30:
+        local_now = local_now.replace(minute=30)
+    else:
+        local_now = local_now.replace(minute=0) + datetime.timedelta(hours=1)
+
+    current_time = local_now.astimezone(datetime.timezone.utc)
+
+    # Fetch tasks and create 'Schedule Day'
     logger.info("Fetching all tasks.")
     tasks = fetch_all_tasks_sorted_by_priority_created()
     create_schedule_day_task()
 
-    # Triage all unassigned tasks
+    # Triage unassigned tasks
     logger.info("Triage unassigned tasks.")
     triage_unassigned_tasks()
 
-    # After triage, fetch tasks again but sorted by creation time
+    # Refetch tasks after triage
     logger.info("Refetching tasks after triage and sorting by creation time.")
     tasks_post_triage = fetch_all_tasks_sorted_by_created()
 
-    # Schedule tasks in pattern: high priority, low priority, repeat
-    schedule_tasks_in_pattern(tasks_post_triage, test_mode=test_mode)
-
+    # Pass the pre-computed current_time to schedule_tasks_in_pattern
+    schedule_tasks_in_pattern(tasks_post_triage, test_mode=test_mode, starting_time=current_time)
 
 if __name__ == "__main__":
     assign_dues_and_blocks(test_mode=True)
