@@ -93,10 +93,9 @@ def fetch_unassigned_tasks():
                 {"property": "Status", "status": {"does_not_equal": "Done"}},
                 {"property": "Status", "status": {"does_not_equal": "Handed Off"}},
                 {"property": "Status", "status": {"does_not_equal": "Deprecated"}},
-                {"property": "Done", "checkbox": {"equals": False}}
-
-
-
+                {"property": "Status", "status": {"does_not_equal": "Waiting on Reply"}},
+                {"property": "Status", "status": {"does_not_equal": "Waiting on other task"}},
+                {"property": "Done", "checkbox": {"equals": False}},
             ]
         },
         "sorts": [
