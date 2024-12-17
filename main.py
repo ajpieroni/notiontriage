@@ -152,10 +152,13 @@ def triage_unassigned_tasks():
         "1": "Low",
         "2": "Medium",
         "3": "High",
-        "4": "Must Be Done Today"
+        "4": "Must Be Done Today",
+        "0": "Someday",
+        "x": "Deprecated"
     }
 
     unassigned_tasks = fetch_unassigned_tasks()
+    print(f"You have {len(unassigned_tasks)} unassigned tasks.")
     for task in unassigned_tasks:
         props = task.get("properties", {})
         task_id = task["id"]
@@ -163,6 +166,7 @@ def triage_unassigned_tasks():
 
         print(f"\nTask: '{task_name}' is currently 'Unassigned'.")
         print("Set a priority by number or 'delete' to deprecate:")
+        print("[0] Someday")
         print("[1] Low")
         print("[2] Medium")
         print("[3] High")
@@ -171,12 +175,12 @@ def triage_unassigned_tasks():
 
         if user_choice == "delete":
             update_task(task_id, task_name=task_name, status="Deprecated")
+        
         elif user_choice in priority_mapping:
             chosen_priority = priority_mapping[user_choice]
             update_task(task_id, task_name=task_name, priority=chosen_priority)
         else:
             logger.info(f"Skipping '{task_name}' - Invalid choice entered.")
-
 def schedule_tasks_in_pattern(tasks, test_mode=True):
     # Separate tasks into high priority and low priority based on their Priority
     # Consider "High" and "Must Be Done Today" as high priority
