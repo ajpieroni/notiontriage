@@ -340,7 +340,7 @@ def schedule_single_task(task, current_time, test_mode, deferred_tasks=None):
             logger.info(f"Task: '{task_name}' marked as Done.")
         else:
             logger.info(
-                f"[TEST MODE] Task: '{task_name}' would be marked as Done."
+                f"[TEST MODE] Task: '{task_name}' would be marked as Deprecated."
             )
     elif user_input in ("C"):
         if not test_mode:
