@@ -202,7 +202,7 @@ def triage_unassigned_tasks():
         else:  # Handle invalid input
             print(f"Invalid choice entered for task '{task_name}'. Please try again.")
 
-def schedule_tasks_in_pattern(tasks, test_mode=True, starting_time=None):
+def schedule_tasks_in_pattern(tasks, test_mode=True, starting_time=None, deferred_tasks=None):
     high_priority_tasks = []
     low_priority_tasks = []
 
@@ -226,47 +226,42 @@ def schedule_tasks_in_pattern(tasks, test_mode=True, starting_time=None):
             task = low_priority_tasks.pop(0)
             current_time = schedule_single_task(task, current_time, test_mode)
 
-def schedule_single_task(task, current_time, test_mode):
+def schedule_single_task(task, current_time, test_mode, deferred_tasks=None):
     props = task.get("properties", {})
     task_id = task["id"]
     task_name = get_task_name(props)
     priority = props.get("Priority", {}).get("status", {}).get("name", "Low")
     time_block_minutes = priority_to_time_block.get(priority, 30)
 
-    start_time = current_time.isoformat()
-    end_time = (current_time + datetime.timedelta(minutes=time_block_minutes)).isoformat()
+    start_time = current_time
+    end_time = start_time + datetime.timedelta(minutes=time_block_minutes)
 
-    # Convert times to local timezone
-    start_time_utc = datetime.datetime.fromisoformat(start_time)
-    end_time_utc = datetime.datetime.fromisoformat(end_time)
-    start_time_local = start_time_utc.astimezone(LOCAL_TIMEZONE).strftime("%Y-%m-%d %I:%M %p %Z")
-    end_time_local = end_time_utc.astimezone(LOCAL_TIMEZONE).strftime("%Y-%m-%d %I:%M %p %Z")
+    # Convert times to local timezone for display
+    start_time_local = start_time.astimezone(LOCAL_TIMEZONE).strftime("%Y-%m-%d %I:%M %p %Z")
+    end_time_local = end_time.astimezone(LOCAL_TIMEZONE).strftime("%Y-%m-%d %I:%M %p %Z")
 
     print(f"\nTask: '{task_name}' (Priority: {priority})")
     print(f"Proposed Start Time (Local): {start_time_local}")
     print(f"Proposed End Time (Local): {end_time_local}")
     print(f"Proposed Time Block: {time_block_minutes} minutes")
-    user_input = input("Apply these changes? (Y/N/High): ").strip().upper()
+    print("[S] Come Back Later | [X] Complete | [C] Complete")
+    user_input = input("Your choice: ").strip().upper()
 
-    if user_input == "Y":
+    if user_input == "S":
+        if deferred_tasks is not None:
+            deferred_tasks.append(task)
+            logger.info(f"Task: '{task_name}' deferred to the end.")
+    elif user_input in ("X", "C"):
         if not test_mode:
-            update_task(task_id, start_time, end_time, task_name, priority)
+            update_task(task_id, status="Done", task_name=task_name)
         else:
             logger.info(
-                f"[TEST MODE] Task: '{task_name}' with Start Time: {start_time_local}, End Time: {end_time_local} would be updated."
-            )
-    elif user_input == "HIGH":
-        if not test_mode:
-            update_task(task_id, priority="High", task_name=task_name)
-        else:
-            logger.info(
-                f"[TEST MODE] Task: '{task_name}' would have its priority set to High."
+                f"[TEST MODE] Task: '{task_name}' would be marked as Done."
             )
     else:
-        logger.info(f"Skipped Task: '{task_name}' - User chose not to update.")
+        logger.info(f"Skipped Task: '{task_name}' - Invalid choice.")
 
-    return current_time + datetime.timedelta(minutes=time_block_minutes)
-
+    return end_time
 
 def assign_dues_and_blocks(test_mode=True):
     local_now = datetime.datetime.now(LOCAL_TIMEZONE)
@@ -289,12 +284,18 @@ def assign_dues_and_blocks(test_mode=True):
     logger.info("Triage unassigned tasks.")
     triage_unassigned_tasks()
 
+    deferred_tasks = []
+
     # Refetch tasks after triage
     logger.info("Refetching tasks after triage and sorting by creation time.")
     tasks_post_triage = fetch_all_tasks_sorted_by_created()
 
     # Pass the pre-computed current_time to schedule_tasks_in_pattern
-    schedule_tasks_in_pattern(tasks_post_triage, test_mode=test_mode, starting_time=current_time)
-
+    schedule_tasks_in_pattern(
+        tasks_post_triage,
+        test_mode=test_mode,
+        starting_time=current_time,
+        deferred_tasks=deferred_tasks
+    )
 if __name__ == "__main__":
     assign_dues_and_blocks(test_mode=True)
