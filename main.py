@@ -78,6 +78,7 @@ def fetch_all_tasks_sorted_by_created():
     response = requests.post(url, headers=headers, json=payload)
     if response.status_code == 200:
         return response.json()["results"]
+        print(f"You have {len(response.json()['results'])} tasks.")
     else:
         logger.error(f"Failed to fetch tasks. Status Code: {response.status_code}, Response: {response.text}")
         return []
