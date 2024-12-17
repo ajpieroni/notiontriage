@@ -286,6 +286,7 @@ def schedule_tasks_in_pattern(tasks, test_mode=False, starting_time=None, deferr
     while high_priority_tasks or low_priority_tasks:
         if high_priority_tasks:
             task = high_priority_tasks.pop(0)
+            
             current_time = schedule_single_task(task, current_time, test_mode)
 
         if low_priority_tasks:
@@ -306,54 +307,99 @@ def schedule_single_task(task, current_time, test_mode, deferred_tasks=None):
     start_time_local = start_time.astimezone(LOCAL_TIMEZONE).strftime("%Y-%m-%d %I:%M %p %Z")
     end_time_local = end_time.astimezone(LOCAL_TIMEZONE).strftime("%Y-%m-%d %I:%M %p %Z")
 
-    print(f"\nTask: '{task_name}' (Priority: {priority})")
+    # Enhanced Print Statements for Clarity
+    print(f"\n{'='*50}")
+    print(f"Task: '{task_name}' (Priority: {priority})")
     print(f"Proposed Start Time (Local): {start_time_local}")
     print(f"Proposed End Time (Local): {end_time_local}")
     print(f"Proposed Time Block: {time_block_minutes} minutes")
     print("[Y] Apply | [S] Come Back Later | [X] Deprecated | [C] Complete")
-    user_input = input("Your choice: ").strip().upper()
+    print(f"{'='*50}")
+    
+    # Input validation loop
+    while True:
+        user_input = input("Your choice: ").strip().upper()
+        if user_input in ["Y", "S", "X", "C"]:
+            break
+        else:
+            print("Invalid choice. Please enter Y, S, X, or C.")
 
     if user_input == "Y":
         # Apply the proposed start and end times
         if not test_mode:
-            update_task(
-                task_id,
-                start_time=start_time.isoformat(),
-                end_time=end_time.isoformat(),
-                task_name=task_name,
-                priority=priority  # Optionally include priority if needed
-            )
-            logger.info(
-                f"Task: '{task_name}' updated with Start Time: {start_time_local}, End Time: {end_time_local}."
-            )
+            try:
+                update_task(
+                    task_id,
+                    start_time=start_time.isoformat(),
+                    end_time=end_time.isoformat(),
+                    task_name=task_name,
+                    priority=priority  # Optionally include priority if needed
+                )
+                logger.info(
+                    f"Task: '{task_name}' updated with Start Time: {start_time_local}, End Time: {end_time_local}."
+                )
+                print(f"Task: '{task_name}' has been scheduled from {start_time_local} to {end_time_local}.")
+            except Exception as e:
+                logger.error(f"Failed to update task: '{task_name}'. Error: {e}")
+                print(f"Failed to update task: '{task_name}'. Check logs for details.")
         else:
             logger.info(
                 f"[TEST MODE] Task: '{task_name}' would be updated with Start Time: {start_time_local}, End Time: {end_time_local}."
             )
+            print(f"[TEST MODE] Task: '{task_name}' would be scheduled from {start_time_local} to {end_time_local}.")
+        return end_time  # Advance the current_time
+
     elif user_input == "S":
         if deferred_tasks is not None:
             deferred_tasks.append(task)
-            logger.info(f"Task: '{task_name}' deferred to the end.")
-    elif user_input in ("X"):
+            try:
+                # Get today's date
+                today = datetime.datetime.now().date()
+
+                # Add one day to today's date (tomorrow)
+                tomorrow = today + datetime.timedelta(days=1)
+
+                # Combine tomorrow's date with the current time's time component
+                time_component = current_time.time()
+                tomorrow_datetime = datetime.datetime.combine(tomorrow, time_component, tzinfo=datetime.timezone.utc)
+                tomorrow_iso = tomorrow_datetime.isoformat()
+
+                # Update task to be deferred until tomorrow at the same time
+                update_task(
+                    task_id,
+                    start_time=tomorrow_iso,
+                    end_time=tomorrow_iso,
+                    task_name=task_name,
+                    priority=priority  # Optionally include priority if needed
+                )
+
+                logger.info(f"Task: '{task_name}' deferred to the end.")
+                print(f"Task '{task_name}' has been deferred to tomorrow ({tomorrow_iso}).")
+            except Exception as e:
+                logger.error(f"Failed to defer task: '{task_name}'. Error: {e}")
+                print(f"Failed to defer task: '{task_name}'. Check logs for details.")
+        return current_time  # Do not advance the current_time
+
+    elif user_input in ("X", "C"):
         if not test_mode:
-            update_task(task_id, status="Deprecated", task_name=task_name)
-            logger.info(f"Task: '{task_name}' marked as Done.")
-        else:
-            logger.info(
-                f"[TEST MODE] Task: '{task_name}' would be marked as Deprecated."
-            )
-    elif user_input in ("C"):
-        if not test_mode:
-            update_task(task_id, status="Done", task_name=task_name)
-            logger.info(f"Task: '{task_name}' marked as Done.")
+            try:
+                update_task(task_id, status="Done", task_name=task_name)
+                logger.info(f"Task: '{task_name}' marked as Done.")
+                print(f"Task: '{task_name}' has been marked as Done.")
+            except Exception as e:
+                logger.error(f"Failed to mark task as Done: '{task_name}'. Error: {e}")
+                print(f"Failed to mark task as Done: '{task_name}'. Check logs for details.")
         else:
             logger.info(
                 f"[TEST MODE] Task: '{task_name}' would be marked as Done."
             )
+            print(f"[TEST MODE] Task: '{task_name}' would be marked as Done.")
+        return end_time  # Optionally, decide if you want to advance time
+
     else:
         logger.info(f"Skipped Task: '{task_name}' - Invalid choice.")
-
-    return end_time
+        return current_time  # Do not advance the current_time
+        
 def assign_dues_and_blocks(test_mode=False):
     local_now = datetime.datetime.now(LOCAL_TIMEZONE)
     local_now = local_now.replace(second=0, microsecond=0)
@@ -390,5 +436,6 @@ def assign_dues_and_blocks(test_mode=False):
         starting_time=current_time,
         deferred_tasks=deferred_tasks
     )
+
 if __name__ == "__main__":
     assign_dues_and_blocks(test_mode=False)
