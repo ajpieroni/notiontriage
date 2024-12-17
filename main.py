@@ -244,16 +244,34 @@ def schedule_single_task(task, current_time, test_mode, deferred_tasks=None):
     print(f"Proposed Start Time (Local): {start_time_local}")
     print(f"Proposed End Time (Local): {end_time_local}")
     print(f"Proposed Time Block: {time_block_minutes} minutes")
-    print("[S] Come Back Later | [X] Complete | [C] Complete")
+    print("[Y] Apply | [S] Come Back Later | [X] Complete | [C] Complete")
     user_input = input("Your choice: ").strip().upper()
 
-    if user_input == "S":
+    if user_input == "Y":
+        # Apply the proposed start and end times
+        if not test_mode:
+            update_task(
+                task_id,
+                start_time=start_time.isoformat(),
+                end_time=end_time.isoformat(),
+                task_name=task_name,
+                priority=priority  # Optionally include priority if needed
+            )
+            logger.info(
+                f"Task: '{task_name}' updated with Start Time: {start_time_local}, End Time: {end_time_local}."
+            )
+        else:
+            logger.info(
+                f"[TEST MODE] Task: '{task_name}' would be updated with Start Time: {start_time_local}, End Time: {end_time_local}."
+            )
+    elif user_input == "S":
         if deferred_tasks is not None:
             deferred_tasks.append(task)
             logger.info(f"Task: '{task_name}' deferred to the end.")
     elif user_input in ("X", "C"):
         if not test_mode:
             update_task(task_id, status="Done", task_name=task_name)
+            logger.info(f"Task: '{task_name}' marked as Done.")
         else:
             logger.info(
                 f"[TEST MODE] Task: '{task_name}' would be marked as Done."
@@ -262,7 +280,6 @@ def schedule_single_task(task, current_time, test_mode, deferred_tasks=None):
         logger.info(f"Skipped Task: '{task_name}' - Invalid choice.")
 
     return end_time
-
 def assign_dues_and_blocks(test_mode=True):
     local_now = datetime.datetime.now(LOCAL_TIMEZONE)
     local_now = local_now.replace(second=0, microsecond=0)
