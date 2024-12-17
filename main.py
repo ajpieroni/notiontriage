@@ -5,6 +5,11 @@ import os
 import logging
 import pytz  # Add this import at the top of the script
 
+PROPERTY_DUE = "Due"
+PROPERTY_PRIORITY = "Priority"
+PROPERTY_STATUS = "Status"
+PROPERTY_DONE = "Done"
+
 # Replace this with your desired timezone
 LOCAL_TIMEZONE = pytz.timezone("America/New_York")
 
@@ -350,34 +355,18 @@ def schedule_single_task(task, current_time, test_mode, deferred_tasks=None):
         return end_time  # Advance the current_time
 
     elif user_input == "S":
-        if deferred_tasks is not None:
-            deferred_tasks.append(task)
-            try:
-                # Get today's date
-                today = datetime.datetime.now().date()
+        print(f"Task '{task_name}' pressed S.")
+        today = datetime.datetime.now().date()
+        # Add one day to today's date (tomorrow)
+        tomorrow = today + datetime.timedelta(days=1)
 
-                # Add one day to today's date (tomorrow)
-                tomorrow = today + datetime.timedelta(days=1)
-
-                # Combine tomorrow's date with the current time's time component
-                time_component = current_time.time()
-                tomorrow_datetime = datetime.datetime.combine(tomorrow, time_component, tzinfo=datetime.timezone.utc)
-                tomorrow_iso = tomorrow_datetime.isoformat()
-
-                # Update task to be deferred until tomorrow at the same time
-                update_task(
+        update_task(
                     task_id,
-                    start_time=tomorrow_iso,
-                    end_time=tomorrow_iso,
+                    start_time=tomorrow.isoformat(),
                     task_name=task_name,
                     priority=priority  # Optionally include priority if needed
                 )
-
-                logger.info(f"Task: '{task_name}' deferred to the end.")
-                print(f"Task '{task_name}' has been deferred to tomorrow ({tomorrow_iso}).")
-            except Exception as e:
-                logger.error(f"Failed to defer task: '{task_name}'. Error: {e}")
-                print(f"Failed to defer task: '{task_name}'. Check logs for details.")
+        print(f"Task '{task_name}' has been deferred to tomorrow ({tomorrow}).")
         return current_time  # Do not advance the current_time
 
     elif user_input in ("X", "C"):
@@ -399,7 +388,7 @@ def schedule_single_task(task, current_time, test_mode, deferred_tasks=None):
     else:
         logger.info(f"Skipped Task: '{task_name}' - Invalid choice.")
         return current_time  # Do not advance the current_time
-        
+
 def assign_dues_and_blocks(test_mode=False):
     local_now = datetime.datetime.now(LOCAL_TIMEZONE)
     local_now = local_now.replace(second=0, microsecond=0)
