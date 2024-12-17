@@ -383,6 +383,16 @@ def schedule_single_task(task, current_time, test_mode, deferred_tasks=None, sch
 
     start_time = current_time
     end_time = start_time + datetime.timedelta(minutes=time_block_minutes)
+   # Convert times to local timezone for checking against 11 PM
+    start_time_local = start_time.astimezone(LOCAL_TIMEZONE)
+    end_time_local = end_time.astimezone(LOCAL_TIMEZONE)
+
+       # Check if the proposed start time is after 11 PM
+    if start_time_local.hour >= 23:
+        print(f"🚨 Scheduling halted. Proposed start time ({start_time_local.strftime('%Y-%m-%d %I:%M %p %Z')}) is after 11 PM.")
+        logger.info("Scheduling process ended as proposed start time exceeded 11 PM.")
+        return None  # Exit the scheduling process
+
 
         # Shift the scheduling window if overlap is detected
     while check_for_overlap(current_schedule, start_time, end_time):
