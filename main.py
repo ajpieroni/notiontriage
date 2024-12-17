@@ -145,14 +145,13 @@ def update_task(task_id, start_time=None, end_time=None, task_name=None, priorit
     else:
         logger.error(f"Failed to update Task: '{task_name}'. Status Code: {response.status_code}, Response: {response.text}")
 
-
 def triage_unassigned_tasks():
     # Mapping from numeric input to priority strings
     priority_mapping = {
         "1": "Low",                   # 1 is Low
         "0": "High",                  # 0 is High
-        "x": "Delete",                # x is Delete (mark as deprecated)
-        "c": "Deprecated"             # c is Deprecated (mark as archived)
+        "c": "Deprecated",            # c is Deprecated (mark as archived)
+        " ": "Someday"                # space is Someday (save for later)
     }
 
     unassigned_tasks = fetch_unassigned_tasks()
@@ -167,12 +166,12 @@ def triage_unassigned_tasks():
         print("\nPlease choose one of the following options to set a priority or to delete the task:")
         print("[1] Low (Minor priority)")
         print("[0] High (Urgent, needs attention soon)")
-        print("[x] Delete (Mark as deprecated and remove from active tasks)")
         print("[c] Deprecated (Mark as archived)")
+        print("[ ] (Space) Someday (Save for later)")
 
         user_choice = input("\nYour choice: ").strip().lower()
 
-        if user_choice == "x":  # Mark as delete
+        if user_choice == "c":  # Mark as delete
             update_task(task_id, task_name=task_name, status="Deprecated")
             print(f"Task '{task_name}' has been marked as 'Deprecated' and deleted.")
         
@@ -183,7 +182,7 @@ def triage_unassigned_tasks():
         
         else:  # Handle invalid input
             print(f"Invalid choice entered for task '{task_name}'. Please try again.")
-            
+
 def schedule_tasks_in_pattern(tasks, test_mode=True):
     # Separate tasks into high priority and low priority based on their Priority
     # Consider "High" and "Must Be Done Today" as high priority
