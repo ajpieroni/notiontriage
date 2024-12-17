@@ -149,38 +149,41 @@ def update_task(task_id, start_time=None, end_time=None, task_name=None, priorit
 def triage_unassigned_tasks():
     # Mapping from numeric input to priority strings
     priority_mapping = {
-        "1": "Low",
-        "2": "Medium",
-        "3": "High",
-        "4": "Must Be Done Today",
-        "0": "Someday",
-        "x": "Deprecated"
+        "1": "Low",                   # 1 is Low
+        "0": "High",                  # 0 is High
+        "x": "Delete",                # x is Delete (mark as deprecated)
+        "c": "Deprecated"             # c is Deprecated (mark as archived)
     }
 
     unassigned_tasks = fetch_unassigned_tasks()
-    print(f"You have {len(unassigned_tasks)} unassigned tasks.")
+    print(f"\nYou have {len(unassigned_tasks)} unassigned tasks.")
+    
     for task in unassigned_tasks:
         props = task.get("properties", {})
         task_id = task["id"]
         task_name = get_task_name(props)
 
         print(f"\nTask: '{task_name}' is currently 'Unassigned'.")
-        print("Set a priority by number or 'delete' to deprecate:")
-        print("[0] Someday")
-        print("[1] Low")
-        print("[2] Medium")
-        print("[3] High")
-        print("[4] Must Be Done Today")
-        user_choice = input("Your choice: ").strip().lower()
+        print("\nPlease choose one of the following options to set a priority or to delete the task:")
+        print("[1] Low (Minor priority)")
+        print("[0] High (Urgent, needs attention soon)")
+        print("[x] Delete (Mark as deprecated and remove from active tasks)")
+        print("[c] Deprecated (Mark as archived)")
 
-        if user_choice == "delete":
+        user_choice = input("\nYour choice: ").strip().lower()
+
+        if user_choice == "x":  # Mark as delete
             update_task(task_id, task_name=task_name, status="Deprecated")
+            print(f"Task '{task_name}' has been marked as 'Deprecated' and deleted.")
         
-        elif user_choice in priority_mapping:
+        elif user_choice in priority_mapping:  # Update priority
             chosen_priority = priority_mapping[user_choice]
             update_task(task_id, task_name=task_name, priority=chosen_priority)
-        else:
-            logger.info(f"Skipping '{task_name}' - Invalid choice entered.")
+            print(f"Task '{task_name}' has been updated to priority: {chosen_priority}.")
+        
+        else:  # Handle invalid input
+            print(f"Invalid choice entered for task '{task_name}'. Please try again.")
+            
 def schedule_tasks_in_pattern(tasks, test_mode=True):
     # Separate tasks into high priority and low priority based on their Priority
     # Consider "High" and "Must Be Done Today" as high priority
