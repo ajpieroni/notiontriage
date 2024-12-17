@@ -89,9 +89,22 @@ def fetch_unassigned_tasks():
     payload = {
         "filter": {
             "and": [
-                {"property": "Priority", "status": {"equals": "Unassigned"}}
+                {"property": "Priority", "status": {"equals": "Unassigned"}},
+                {"property": "Status", "status": {"does_not_equal": "Done"}},
+                {"property": "Status", "status": {"does_not_equal": "Handed Off"}},
+                {"property": "Status", "status": {"does_not_equal": "Deprecated"}},
+                {"property": "Done", "checkbox": {"equals": False}}
+
+
+
             ]
-        }
+        },
+        "sorts": [
+            {
+                "timestamp": "created_time",
+                "direction": "ascending"
+            }
+        ]
     }
     response = requests.post(url, headers=headers, json=payload)
     if response.status_code == 200:
@@ -146,12 +159,13 @@ def update_task(task_id, start_time=None, end_time=None, task_name=None, priorit
         logger.error(f"Failed to update Task: '{task_name}'. Status Code: {response.status_code}, Response: {response.text}")
 
 def triage_unassigned_tasks():
-    # Mapping from numeric input to priority strings
+    # Mapping from numeric input to priority strings and statuses
     priority_mapping = {
         "1": "Low",                   # 1 is Low
-        "0": "High",                  # 0 is High
+        "2": "High",                  # 2 is High
         "c": "Deprecated",            # c is Deprecated (mark as archived)
-        " ": "Someday"                # space is Someday (save for later)
+        "x": "Completed",             # x is Completed (mark as completed)
+        "s": "Someday"                # s is Someday (save for later)
     }
 
     unassigned_tasks = fetch_unassigned_tasks()
@@ -165,15 +179,20 @@ def triage_unassigned_tasks():
         print(f"\nTask: '{task_name}' is currently 'Unassigned'.")
         print("\nPlease choose one of the following options to set a priority or to delete the task:")
         print("[1] Low (Minor priority)")
-        print("[0] High (Urgent, needs attention soon)")
+        print("[2] High (Urgent, needs attention soon)")
         print("[c] Deprecated (Mark as archived)")
-        print("[ ] (Space) Someday (Save for later)")
+        print("[x] Completed (Mark as completed)")
+        print("[s] Someday (Save for later)")
 
         user_choice = input("\nYour choice: ").strip().lower()
 
-        if user_choice == "c":  # Mark as delete
+        if user_choice == "c":  # Mark as Deprecated
             update_task(task_id, task_name=task_name, status="Deprecated")
-            print(f"Task '{task_name}' has been marked as 'Deprecated' and deleted.")
+            print(f"Task '{task_name}' has been marked as 'Deprecated' and archived.")
+        
+        elif user_choice == "x":  # Mark as Completed
+            update_task(task_id, task_name=task_name, status="Completed")
+            print(f"Task '{task_name}' has been marked as 'Completed'.")
         
         elif user_choice in priority_mapping:  # Update priority
             chosen_priority = priority_mapping[user_choice]
