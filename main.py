@@ -7,6 +7,13 @@ import pytz
 import tzlocal
 import calendar
 
+from prompt_toolkit import Application
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.layout.containers import HSplit, Window
+from prompt_toolkit.layout.controls import FormattedTextControl
+from prompt_toolkit.layout.layout import Layout
+from prompt_toolkit.styles import Style
+
 PROPERTY_DUE = "Due"
 PROPERTY_PRIORITY = "Priority"
 PROPERTY_STATUS = "Status"
@@ -24,7 +31,6 @@ logger = logging.getLogger()
 # logger.setLevel(logging.DEBUG)  # More detailed logs
 
 priority_to_time_block = {
-    # !TODO: update time based on LOE
     "Low": 30,
     "Medium": 30,
     "High": 30,
@@ -44,7 +50,6 @@ def get_task_name(properties):
         return "Unnamed Task"
 
 def fetch_tasks(filter_payload, sorts_payload):
-    # logger.debug("Fetching tasks with provided filter and sorts.")
     url = f"https://api.notion.com/v1/databases/{DATABASE_ID}/query"
     payload = {
         "filter": filter_payload,
@@ -53,14 +58,12 @@ def fetch_tasks(filter_payload, sorts_payload):
     }
     response = requests.post(url, headers=headers, json=payload)
     if response.status_code == 200:
-        # logger.debug("Tasks fetched successfully.")
         return response.json().get("results", [])
     else:
         logger.error(f"Failed to fetch tasks. Status: {response.status_code}, {response.text}")
         return []
 
 def fetch_all_tasks_sorted_by_priority_created():
-    # logger.debug("Fetching tasks sorted by priority and creation time.")
     filter_payload = {
         "and": [
             {"property": "Priority", "status": {"does_not_equal": "Someday"}},
@@ -79,7 +82,6 @@ def fetch_all_tasks_sorted_by_priority_created():
     return fetch_tasks(filter_payload, sorts_payload)
 
 def fetch_all_tasks_sorted_by_created(assigned_time_equals=False):
-    # logger.debug(f"Fetching tasks sorted by creation time with Assigned time = {assigned_time_equals}")
     today = datetime.datetime.now().date().isoformat()
     filter_payload = {
         "and": [
@@ -121,11 +123,9 @@ def fetch_all_tasks_sorted_by_created(assigned_time_equals=False):
     return fetch_tasks(filter_payload, sorts_payload)
 
 def fetch_current_schedule():
-    # logger.debug("Fetching current schedule tasks.")
     return fetch_all_tasks_sorted_by_created(assigned_time_equals=True)
 
 def fetch_unassigned_tasks():
-    # logger.debug("Fetching unassigned tasks.")
     filter_payload = {
         "and": [
             {"property": "Priority", "status": {"equals": "Unassigned"}},
@@ -143,7 +143,6 @@ def fetch_unassigned_tasks():
     return fetch_tasks(filter_payload, sorts_payload)
 
 def create_schedule_day_task():
-    # logger.debug("Attempting to create 'Schedule Day' task if not existing for today.")
     today = datetime.datetime.now(LOCAL_TIMEZONE).date().isoformat()
     url = f"https://api.notion.com/v1/databases/{DATABASE_ID}/query"
     filter_payload = {
@@ -199,7 +198,6 @@ def create_schedule_day_task():
         logger.error(f"Failed to create 'Schedule Day' task. Status: {create_resp.status_code}, {create_resp.text}")
 
 def update_task(task_id, start_time=None, end_time=None, task_name=None, priority=None, status=None):
-    # logger.debug(f"Updating task '{task_name}' (ID: {task_id}) with new times/priority/status.")
     url = f"https://api.notion.com/v1/pages/{task_id}"
     payload = {"properties": {}}
 
@@ -229,11 +227,8 @@ def update_task(task_id, start_time=None, end_time=None, task_name=None, priorit
     response = requests.patch(url, headers=headers, json=payload)
     if response.status_code != 200:
         logger.error(f"Failed to update Task: '{task_name}'. Status: {response.status_code}, {response.text}")
-    else:
-        logger.debug(f"Task '{task_name}' updated successfully.")
 
 def parse_custom_date(input_str):
-    # logger.debug(f"Parsing custom date input: '{input_str}'")
     parts = input_str.split()
     if len(parts) == 2:
         month_str, year_str = parts
@@ -257,7 +252,6 @@ def triage_unassigned_tasks():
         "s": "Someday"
     }
 
-    # Fetch previously triaged task names (this could be a database, a file, or a list)
     previously_triaged = set()  # Example: Replace with actual logic to fetch these from storage
 
     unassigned_tasks = fetch_unassigned_tasks()
@@ -268,7 +262,6 @@ def triage_unassigned_tasks():
         task_id = task["id"]
         task_name = get_task_name(props)
 
-        # Check if the task has already been triaged
         if task_name in previously_triaged:
             print(f"🔁 Task '{task_name}' has already been triaged. Marking as Deprecated.")
             update_task(task_id, task_name=task_name, status="Deprecated")
@@ -294,7 +287,6 @@ def triage_unassigned_tasks():
             print(f"📌 '{task_name}' priority: {chosen_priority}")
             
             if chosen_priority == "High":
-                # Automatically set due date to today
                 today = datetime.datetime.now(LOCAL_TIMEZONE).date().isoformat()
                 update_task(task_id, task_name=task_name, start_time=today)
                 print(f"📅 Due date for '{task_name}' set to today: {today}")
@@ -325,13 +317,11 @@ def triage_unassigned_tasks():
                     print(f"📅 '{task_name}' due date: {due_date_str}")
                     break
 
-        # Add the task name to previously triaged set
         previously_triaged.add(task_name)
 
 def check_for_overlap(current_schedule, proposed_start, proposed_end):
     proposed_start_utc = proposed_start.astimezone(datetime.timezone.utc)
     proposed_end_utc = proposed_end.astimezone(datetime.timezone.utc)
-    # logger.debug(f"Checking overlap for interval {proposed_start_utc} - {proposed_end_utc}")
 
     for task in current_schedule:
         props = task.get("properties", {})
@@ -340,33 +330,24 @@ def check_for_overlap(current_schedule, proposed_start, proposed_end):
         existing_end = due.get("end")
 
         if not existing_start or not existing_end:
-            logger.debug(f"Task '{get_task_name(props)}' missing start/end times.")
             continue
 
         existing_start_dt = datetime.datetime.fromisoformat(existing_start).astimezone(datetime.timezone.utc)
         existing_end_dt = datetime.datetime.fromisoformat(existing_end).astimezone(datetime.timezone.utc)
 
-        # logger.debug(f"Compare with '{get_task_name(props)}': {existing_start_dt} - {existing_end_dt}")
         if (proposed_start_utc < existing_end_dt) and (proposed_end_utc > existing_start_dt):
-            logger.debug(f"Overlap found with '{get_task_name(props)}'")
             return True
-
-    logger.debug("No overlap found.")
     return False
 
 def handle_overlapping_due_dates(current_schedule):
-    logger.debug("Resolving overlapping due dates...")
     today = datetime.datetime.now(LOCAL_TIMEZONE).date().isoformat()
 
     def get_priority_level(task):
         props = task.get("properties", {})
         priority = props.get("Priority", {}).get("status", {}).get("name", "Low")
-        level = "High" if priority in ["High", "Must Be Done Today"] else "Low"
-        logger.debug(f"'{get_task_name(props)}' priority: {priority} → {level}")
-        return level
+        return "High" if priority in ["High", "Must Be Done Today"] else "Low"
 
     def set_date_only(task_id, task_name):
-        logger.debug(f"Setting date-only for '{task_name}'")
         url = f"https://api.notion.com/v1/pages/{task_id}"
         payload = {
             "properties": {
@@ -378,34 +359,22 @@ def handle_overlapping_due_dates(current_schedule):
             }
         }
         r = requests.patch(url, headers=headers, json=payload)
-        if r.status_code == 200:
-            logger.info(f"✅ '{task_name}' due date = {today}, no time.")
-        else:
-            logger.error(f"❌ Failed to update '{task_name}'.")
+        if r.status_code != 200:
+            logger.error(f"Failed to update '{task_name}'.")
 
     def get_task_times(task):
         props = task.get("properties", {})
         due = props.get("Due", {}).get("date", {})
         start = due.get("start")
         end = due.get("end")
-        logger.debug(f"Checking task '{get_task_name(props)}' for times.")
         if not start or not end:
-            logger.debug(f"Task '{get_task_name(props)}' no start/end.")
             return None, None
         start_dt = datetime.datetime.fromisoformat(start).astimezone(datetime.timezone.utc)
         end_dt = datetime.datetime.fromisoformat(end).astimezone(datetime.timezone.utc)
         return start_dt, end_dt
 
-    def get_task_name_for(task):
-        return get_task_name(task.get("properties", {}))
-
     overlapping_pairs = []
     n = len(current_schedule)
-    logger.debug(f"Current schedule length: {n}")
-    logger.debug("Tasks in current schedule for overlap check:")
-    for ctask in current_schedule:
-        cname = get_task_name(ctask.get("properties", {}))
-        logger.debug(f" - {cname}")
 
     for i in range(n):
         task_a = current_schedule[i]
@@ -419,48 +388,33 @@ def handle_overlapping_due_dates(current_schedule):
             if b_start_dt is None or b_end_dt is None:
                 continue
             if a_start_dt < b_end_dt and b_start_dt < a_end_dt:
-                logger.info(f"Overlap: '{get_task_name_for(task_a)}' and '{get_task_name_for(task_b)}'")
                 overlapping_pairs.append((task_a, task_b))
 
     if not overlapping_pairs:
-        logger.debug("No overlaps found to resolve.")
         return
 
-    logger.debug(f"Overlapping pairs found: {len(overlapping_pairs)}")
     handled_ids = set()
     for (task_a, task_b) in overlapping_pairs:
         a_id = task_a["id"]
         b_id = task_b["id"]
         if a_id in handled_ids or b_id in handled_ids:
-            logger.debug(f"Already handled {a_id} or {b_id}.")
             continue
 
         a_priority = get_priority_level(task_a)
         b_priority = get_priority_level(task_b)
-        a_name = get_task_name_for(task_a)
-        b_name = get_task_name_for(task_b)
 
-        logger.info(f"Resolving overlap between '{a_name}' ({a_priority}) and '{b_name}' ({b_priority})")
+        set_date_only(a_id, get_task_name(task_a.get("properties", {})))
+        set_date_only(b_id, get_task_name(task_b.get("properties", {})))
 
-        set_date_only(a_id, a_name)
-        set_date_only(b_id, b_name)
-
-        if a_priority == "High" and b_priority == "High":
-            logger.info(f"Both high: keep both '{a_name}' and '{b_name}'.")
-        elif a_priority == "High" and b_priority == "Low":
-            logger.info(f"Keep '{a_name}' (High), remove '{b_name}' (Low).")
+        if a_priority == "High" and b_priority == "Low":
             current_schedule[:] = [t for t in current_schedule if t["id"] != b_id]
         elif a_priority == "Low" and b_priority == "High":
-            logger.info(f"Keep '{b_name}' (High), remove '{a_name}' (Low).")
             current_schedule[:] = [t for t in current_schedule if t["id"] != a_id]
-        else:
-            logger.info(f"Both low: remove '{a_name}' and '{b_name}'.")
+        elif a_priority == "Low" and b_priority == "Low":
             current_schedule[:] = [t for t in current_schedule if t["id"] not in (a_id, b_id)]
 
         handled_ids.add(a_id)
         handled_ids.add(b_id)
-
-    logger.debug("Finished resolving overlaps.")
 
 def calculate_available_time_blocks(current_schedule, start_hour=9, end_hour=23):
     now_local = datetime.datetime.now(LOCAL_TIMEZONE)
@@ -505,10 +459,8 @@ def display_available_time_blocks(free_blocks):
 
 def show_schedule_overview(current_schedule):
     print("\n🔍 Checking schedule overview...")
-    logger.debug("Before resolving overlaps.")
     print("\n🛠️ Resolving overlapping due dates...")
     handle_overlapping_due_dates(current_schedule)
-    logger.debug("After resolving overlaps.")
 
     free_blocks = calculate_available_time_blocks(current_schedule)
     display_available_time_blocks(free_blocks)
@@ -653,10 +605,6 @@ def schedule_single_task(task, current_time, test_mode, current_schedule, schedu
                     del task["properties"]["Due"]["date"]["end"]
         return current_time
 
-    else:
-        logger.info(f"Skipped Task: '{task_name}' - Invalid choice.")
-        return current_time
-
 def schedule_tasks_in_pattern(tasks, test_mode=False, starting_time=None, deferred_tasks=None, scheduled_task_names=None):
     if scheduled_task_names is None:
         scheduled_task_names = set()
@@ -675,6 +623,7 @@ def schedule_tasks_in_pattern(tasks, test_mode=False, starting_time=None, deferr
         else:
             low_priority_tasks.append(t)
 
+    # Sort so that "Must Be Done Today" shows up first among high items
     high_priority_tasks.sort(key=lambda task: task.get("properties", {}).get("Priority", {}).get("status", {}).get("name") != "Must Be Done Today")
 
     current_time = starting_time or datetime.datetime.now(datetime.timezone.utc)
@@ -698,7 +647,6 @@ def schedule_complete():
     print("Scheduling complete. Have a great day!")
 
 def assign_dues_and_blocks(test_mode=False):
-    # logger.debug("Assigning dues and blocks...")
     local_now = datetime.datetime.now(LOCAL_TIMEZONE).replace(second=0, microsecond=0)
     if local_now.minute < 30:
         local_now = local_now.replace(minute=30)
@@ -706,7 +654,6 @@ def assign_dues_and_blocks(test_mode=False):
         local_now = local_now.replace(minute=0) + datetime.timedelta(hours=1)
 
     current_time = local_now.astimezone(datetime.timezone.utc)
-    # logger.debug(f"Initial current time: {current_time}")
 
     tasks = fetch_all_tasks_sorted_by_priority_created()
     create_schedule_day_task()
@@ -739,5 +686,142 @@ def assign_dues_and_blocks(test_mode=False):
 
     print("\n🎉 **Scheduling complete! Have a great day!**")
 
+
+# -------------------------------------------------------------------
+#  Below is the prompt_toolkit-based TUI for unassigned tasks
+# -------------------------------------------------------------------
+
+class TaskSchedulerTUI:
+    def __init__(self):
+        self.logger = logging.getLogger(__name__)
+        self.tasks = []
+        self.current_index = 0
+        self.load_tasks()
+
+        # Keyboard bindings
+        self.kb = KeyBindings()
+
+        @self.kb.add('c-q')
+        def exit_(event):
+            event.app.exit()
+
+        @self.kb.add('up')
+        def up_(event):
+            if self.current_index > 0:
+                self.current_index -= 1
+
+        @self.kb.add('down')
+        def down_(event):
+            if self.current_index < len(self.tasks) - 1:
+                self.current_index += 1
+
+        @self.kb.add('enter')
+        def select_(event):
+            if self.tasks:
+                self.handle_task_action(self.current_index)
+
+        # Create the layout
+        self.layout = self.create_layout()
+
+        # Create the application
+        self.app = Application(
+            layout=Layout(self.layout),
+            key_bindings=self.kb,
+            full_screen=True,
+            style=self.style()
+        )
+
+    def load_tasks(self):
+        self.tasks = fetch_unassigned_tasks()
+
+    def style(self):
+        return Style.from_dict({
+            "status": "reverse",
+            "frame": "bg:#000000 #ffffff",
+            "task": "#ff9d00",
+            "highlighted": "bg:#444444 #ffffff"
+        })
+
+    def create_layout(self):
+        def get_formatted_tasks():
+            lines = []
+            for i, task in enumerate(self.tasks):
+                name = get_task_name(task.get("properties", {}))
+                prefix = "→ " if i == self.current_index else "  "
+                if i == self.current_index:
+                    highlight = [("class:highlighted", prefix + name)]
+                else:
+                    highlight = [("class:task", prefix + name)]
+                lines.append(highlight)
+            return lines or [("class:task", "No unassigned tasks.")]
+
+        task_list_window = Window(
+            content=FormattedTextControl(lambda: get_formatted_tasks()),
+            wrap_lines=False
+        )
+
+        body = HSplit([
+            Window(
+                height=1,
+                content=FormattedTextControl("Unassigned Tasks (Up/Down to move, Enter to triage, Ctrl-Q to quit)")
+            ),
+            task_list_window
+        ])
+
+        return body
+
+    def run(self):
+        self.app.run()
+
+    def handle_task_action(self, index):
+        task = self.tasks[index]
+        name = get_task_name(task.get("properties", {}))
+
+        print(f"\nSelected task: {name}")
+        print("[1] Low")
+        print("[2] High")
+        print("[c] Deprecated")
+        print("[x] Done")
+        print("[s] Someday")
+        choice = input("Your choice: ").strip().lower()
+
+        priority_mapping = {
+            "1": "Low",
+            "2": "High",
+            "c": "Deprecated",
+            "x": "Done",
+            "s": "Someday"
+        }
+
+        if choice in priority_mapping:
+            chosen = priority_mapping[choice]
+            if chosen in ["Deprecated", "Done"]:
+                update_task(task["id"], task_name=name, status=chosen)
+            else:
+                update_task(task["id"], task_name=name, priority=chosen)
+            print(f"Task '{name}' updated → {chosen}")
+        else:
+            print("Invalid choice.")
+
+        # Refresh tasks after action
+        self.load_tasks()
+
+
+def run_gui():
+    """
+    This function runs the TUI for unassigned tasks.
+    """
+    scheduler_tui = TaskSchedulerTUI()
+    scheduler_tui.run()
+
+
 if __name__ == "__main__":
-    assign_dues_and_blocks(test_mode=False)
+    # Choose what to run:
+    # 1. Command-line approach with full scheduling
+    # 2. Prompt_toolkit TUI for unassigned tasks
+    RUN_GUI = False  # Toggle to True to run the TUI
+
+    if RUN_GUI:
+        run_gui()
+    else:
+        assign_dues_and_blocks(test_mode=False)
