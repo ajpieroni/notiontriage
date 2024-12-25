@@ -855,24 +855,25 @@ class TaskSchedulerTUI:
             for i, task in enumerate(self.tasks):
                 name = get_task_name(task.get("properties", {}))
                 prefix = "→ " if i == self.current_index else "  "
-                if i == self.current_index:
-                    highlight = [("class:highlighted", prefix + name)]
-                else:
-                    highlight = [("class:task", prefix + name)]
-                lines.append(highlight)
-            return lines or [("class:task", "No unassigned tasks.")]
+                # Decide style
+                style = "class:highlighted" if i == self.current_index else "class:task"
+                lines.append((style, prefix + name))
+            
+            # No tasks? Provide a fallback line.
+            if not lines:
+                lines = [("class:task", "No unassigned tasks.")]
+            
+            return lines
 
         task_list_window = Window(
-            content=FormattedTextControl(lambda: get_formatted_tasks()),
+            content=FormattedTextControl(get_formatted_tasks),
             wrap_lines=False
         )
 
         body = HSplit([
             Window(
                 height=1,
-                content=FormattedTextControl(
-                    "Unassigned Tasks (Up/Down to move, Enter to triage, Ctrl-Q to quit)"
-                )
+                content=FormattedTextControl("Unassigned Tasks (Up/Down, Enter, Ctrl-Q to quit)"),
             ),
             task_list_window
         ])
