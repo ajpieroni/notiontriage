@@ -5,3 +5,5 @@ python-dotenv==1.0.1
 pytz==2024.2
 requests==2.32.3
 urllib3==2.2.3
+tzlocal==5.0.1
+prompt_toolkit==3.0.38
