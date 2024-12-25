@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 import os
 import logging
 import pytz
+import tzlocal
 import calendar
 
 PROPERTY_DUE = "Due"
@@ -11,7 +12,7 @@ PROPERTY_PRIORITY = "Priority"
 PROPERTY_STATUS = "Status"
 PROPERTY_DONE = "Done"
 
-LOCAL_TIMEZONE = pytz.timezone("America/New_York")
+LOCAL_TIMEZONE = tzlocal.get_localzone()
 
 load_dotenv()
 
