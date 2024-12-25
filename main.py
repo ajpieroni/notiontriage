@@ -557,7 +557,17 @@ def show_schedule_overview(current_schedule):
 
 # --------------------------- CORE SCHEDULING LOGIC ---------------------------
 
-def schedule_single_task(task, current_time, test_mode, current_schedule, scheduled_task_names):
+def schedule_single_task(task,
+                         current_time,
+                         test_mode,
+                         current_schedule,
+                         scheduled_task_names,
+                         accept_all_mode=False):
+    """
+    Schedules a single task. If accept_all_mode is True, automatically applies 'Y' (Apply)
+    without prompting the user. If the user types 'ACCEPT ALL', we switch to that mode
+    for this and all subsequent tasks.
+    """
     props = task.get("properties", {})
     task_id = task["id"]
     task_name = get_task_name(props)
@@ -572,7 +582,7 @@ def schedule_single_task(task, current_time, test_mode, current_schedule, schedu
     if start_time_local.hour >= 23:
         print(f"🚨 Scheduling halted. Start time after 11 PM: {start_time_local.strftime('%Y-%m-%d %I:%M %p %Z')}")
         schedule_complete()
-        return None
+        return None, accept_all_mode
 
     # Adjust if overlapping
     overlap_count = 0
@@ -587,61 +597,92 @@ def schedule_single_task(task, current_time, test_mode, current_schedule, schedu
     start_time_disp = start_time_local.strftime("%Y-%m-%d %I:%M %p %Z")
     end_time_disp = end_time_local.strftime("%Y-%m-%d %I:%M %p %Z")
 
-    # If already scheduled, skip to avoid double-booking
+    # Already scheduled?
     if task_name in scheduled_task_names:
         print(f"🚨 Task '{task_name}' already scheduled. Skipping.")
-        return current_time
+        return current_time, accept_all_mode
 
+    # -----------------------
+    # If accept_all_mode=True, automatically do "Y" logic without asking
+    # -----------------------
+    if accept_all_mode:
+        if not test_mode:
+            start_iso = start_time_local.isoformat()
+            end_iso = end_time_local.isoformat()
+            update_date_time(task_id, task_name=task_name, start_time=start_iso, end_time=end_iso, priority=priority)
+            print(f"[Accept All] Task '{task_name}' scheduled from {start_time_disp} to {end_time_disp}.")
+            task["properties"]["Due"]["date"]["start"] = start_iso
+            task["properties"]["Due"]["date"]["end"] = end_iso
+            if task not in current_schedule:
+                current_schedule.append(task)
+        return end_time_local.astimezone(datetime.timezone.utc), accept_all_mode
+
+    # Prompt user normally if not accept_all_mode
     print(f"\n{'='*50}")
     print(f"Task: '{task_name}' (Priority: {priority})")
     print(f"Proposed Start: {start_time_disp}, End: {end_time_disp} ({time_block_minutes} mins)")
     print("[Y] Apply | [S] Tomorrow | [X] Deprecated | [C] Complete | [H] High | [W] +1 Week")
-    print("Or type a time like '9pm' to override:")
+    print("Or type a time like '9pm' to override, or type 'ACCEPT ALL' to apply all remaining automatically:")
     print(f"{'='*50}")
 
-    scheduled_task_names.add(task_name)  # Mark as seen to avoid future duplication
+    scheduled_task_names.add(task_name)  # Mark as seen to avoid duplication
 
     while True:
         user_input = input("Your choice: ").strip().upper()
+
+        # New "ACCEPT ALL" option
+        if user_input == "ACCEPT ALL":
+            print("✅ Switching to 'Accept All' mode for this and remaining tasks.")
+            accept_all_mode = True
+            # Immediately handle this task as "Y"
+            if not test_mode:
+                start_iso = start_time_local.isoformat()
+                end_iso = end_time_local.isoformat()
+                update_date_time(task_id, task_name=task_name, start_time=start_iso, end_time=end_iso, priority=priority)
+                print(f"Task '{task_name}' scheduled from {start_time_disp} to {end_time_disp}.")
+                if task not in current_schedule:
+                    current_schedule.append(task)
+            return end_time_local.astimezone(datetime.timezone.utc), accept_all_mode
+
         if user_input in ["Y", "S", "X", "C", "H", "W"]:
             break
-        else:
-            # Attempt to parse user-provided time
-            parsed_time = None
-            for fmt in ["%I%p", "%I:%M%p", "%H:%M"]:
-                try:
-                    today = start_time_local.date()
-                    new_time = datetime.datetime.strptime(user_input, fmt).time()
-                    new_start_local = LOCAL_TIMEZONE.localize(datetime.datetime.combine(today, new_time))
-                    parsed_time = new_start_local
-                    break
-                except ValueError:
-                    continue
 
-            if parsed_time:
-                start_time_local = parsed_time
+        # Otherwise, user might have typed a time
+        parsed_time = None
+        for fmt in ["%I%p", "%I:%M%p", "%H:%M"]:
+            try:
+                today = start_time_local.date()
+                new_time = datetime.datetime.strptime(user_input, fmt).time()
+                new_start_local = LOCAL_TIMEZONE.localize(datetime.datetime.combine(today, new_time))
+                parsed_time = new_start_local
+                break
+            except ValueError:
+                continue
+
+        if parsed_time:
+            start_time_local = parsed_time
+            end_time_local = start_time_local + datetime.timedelta(minutes=time_block_minutes)
+            if start_time_local.hour >= 23:
+                print("🚨 New start after 11 PM. Halting.")
+                return None, accept_all_mode
+
+            overlap_count = 0
+            while check_for_overlap(current_schedule, start_time_local, end_time_local):
+                overlap_count += 1
+                start_time_local = end_time_local
                 end_time_local = start_time_local + datetime.timedelta(minutes=time_block_minutes)
-                if start_time_local.hour >= 23:
-                    print("🚨 New start after 11 PM. Halting.")
-                    return None
 
-                overlap_count = 0
-                while check_for_overlap(current_schedule, start_time_local, end_time_local):
-                    overlap_count += 1
-                    start_time_local = end_time_local
-                    end_time_local = start_time_local + datetime.timedelta(minutes=time_block_minutes)
+            if overlap_count > 0:
+                print(f"Adjusted schedule {overlap_count} times to avoid overlap.")
 
-                if overlap_count > 0:
-                    print(f"Adjusted schedule {overlap_count} times to avoid overlap.")
+            start_time_disp = start_time_local.strftime("%Y-%m-%d %I:%M %p %Z")
+            end_time_disp = end_time_local.strftime("%Y-%m-%d %I:%M %p %Z")
+            print(f"\nNew Start: {start_time_disp}, End: {end_time_disp}")
+            print("[Y] Apply | [S] Later | [X] Deprecated | [C] Complete | [H] High | [W] +1 Week")
+        else:
+            print("Invalid time. Try again.")
 
-                start_time_disp = start_time_local.strftime("%Y-%m-%d %I:%M %p %Z")
-                end_time_disp = end_time_local.strftime("%Y-%m-%d %I:%M %p %Z")
-                print(f"\nNew Start: {start_time_disp}, End: {end_time_disp}")
-                print("[Y] Apply | [S] Later | [X] Deprecated | [C] Complete | [H] High | [W] +1 Week")
-            else:
-                print("Invalid time. Try again.")
-
-    # Process user choice
+    # Handle user choice (no 'ACCEPT ALL' in this branch)
     if user_input == "Y":
         if not test_mode:
             start_iso = start_time_local.isoformat()
@@ -652,10 +693,9 @@ def schedule_single_task(task, current_time, test_mode, current_schedule, schedu
             task["properties"]["Due"]["date"]["end"] = end_iso
             if task not in current_schedule:
                 current_schedule.append(task)
-        return end_time_local.astimezone(datetime.timezone.utc)
+        return end_time_local.astimezone(datetime.timezone.utc), accept_all_mode
 
     elif user_input == "S":
-        # Defer to tomorrow (no time, date-only)
         print(f"Task '{task_name}' deferred to tomorrow.")
         tomorrow = (start_time_local.date() + datetime.timedelta(days=1)).isoformat()
         if not test_mode:
@@ -663,19 +703,17 @@ def schedule_single_task(task, current_time, test_mode, current_schedule, schedu
             task["properties"]["Due"]["date"]["start"] = tomorrow
             if "end" in task["properties"]["Due"]["date"]:
                 del task["properties"]["Due"]["date"]["end"]
-        return current_time
+        return current_time, accept_all_mode
 
     elif user_input in ("X", "C"):
-        # Mark as done
         if not test_mode:
             update_date_time(task_id, status="Done", task_name=task_name)
             print(f"Task '{task_name}' Done.")
             if task in current_schedule:
                 current_schedule.remove(task)
-        return end_time_local.astimezone(datetime.timezone.utc)
+        return end_time_local.astimezone(datetime.timezone.utc), accept_all_mode
 
     elif user_input == "H":
-        # Mark as high priority, schedule with time
         if not test_mode:
             start_iso = start_time_local.isoformat()
             end_iso = end_time_local.isoformat()
@@ -683,23 +721,25 @@ def schedule_single_task(task, current_time, test_mode, current_schedule, schedu
             print(f"Task '{task_name}' High priority and scheduled.")
             if task not in current_schedule:
                 current_schedule.append(task)
-        return end_time_local.astimezone(datetime.timezone.utc)
+        return end_time_local.astimezone(datetime.timezone.utc), accept_all_mode
 
     elif user_input == "W":
-        # +1 week, date-only
         one_week_later_date = (start_time_local.date() + datetime.timedelta(days=7)).isoformat()
         if not test_mode:
             update_date_only(task_id, task_name=task_name, date_str=one_week_later_date)
             task["properties"]["Due"]["date"]["start"] = one_week_later_date
             if "end" in task["properties"]["Due"]["date"]:
                 del task["properties"]["Due"]["date"]["end"]
-        return current_time
+        return current_time, accept_all_mode
 
-
-def schedule_tasks_in_pattern(tasks, test_mode=False, starting_time=None, deferred_tasks=None, scheduled_task_names=None):
+def schedule_tasks_in_pattern(tasks,
+                             test_mode=False,
+                             starting_time=None,
+                             deferred_tasks=None,
+                             scheduled_task_names=None):
     """
     Schedules tasks in two passes: High first, then Low.
-    Each pass calls `schedule_single_task`.
+    Each pass calls `schedule_single_task`. Adds an accept_all_mode to skip prompts.
     """
     if scheduled_task_names is None:
         scheduled_task_names = set()
@@ -718,31 +758,48 @@ def schedule_tasks_in_pattern(tasks, test_mode=False, starting_time=None, deferr
         else:
             low_priority_tasks.append(t)
 
-    # Ensure "Must Be Done Today" is first among the high items
-    high_priority_tasks.sort(key=lambda task: 
-        task.get("properties", {}).get("Priority", {}).get("status", {}).get("name") != "Must Be Done Today"
+    # Sort so "Must Be Done Today" tasks appear first among the High ones
+    high_priority_tasks.sort(
+        key=lambda task: task.get("properties", {}).get("Priority", {}).get("status", {}).get("name") 
+                        != "Must Be Done Today"
     )
 
     current_time = starting_time or datetime.datetime.now(datetime.timezone.utc)
     current_schedule = fetch_current_schedule()
 
-    # Schedule high priority tasks
+    # Tracks whether we are in "Accept All" mode
+    accept_all_mode = False
+
+    # 1) Schedule High priority tasks
     while high_priority_tasks:
         task = high_priority_tasks.pop(0)
-        new_time = schedule_single_task(task, current_time, test_mode, current_schedule, scheduled_task_names)
+        new_time, accept_all_mode = schedule_single_task(
+            task,
+            current_time,
+            test_mode,
+            current_schedule,
+            scheduled_task_names,
+            accept_all_mode=accept_all_mode
+        )
         if new_time is None:
-            return
+            return  # Scheduling halted
         current_time = new_time
 
-    # Then schedule lower priority tasks
+    # 2) Schedule Low priority tasks
     while low_priority_tasks:
         task = low_priority_tasks.pop(0)
-        new_time = schedule_single_task(task, current_time, test_mode, current_schedule, scheduled_task_names)
+        new_time, accept_all_mode = schedule_single_task(
+            task,
+            current_time,
+            test_mode,
+            current_schedule,
+            scheduled_task_names,
+            accept_all_mode=accept_all_mode
+        )
         if new_time is None:
             return
         current_time = new_time
-
-
+        
 def schedule_complete():
     print("Scheduling complete. Have a great day!")
 
