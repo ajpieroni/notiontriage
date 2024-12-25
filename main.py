@@ -248,7 +248,6 @@ def parse_custom_date(input_str):
     return None
 
 def triage_unassigned_tasks():
-    # logger.debug("Triaging unassigned tasks.")
     priority_mapping = {
         "1": "Low",
         "2": "High",
@@ -257,6 +256,9 @@ def triage_unassigned_tasks():
         "s": "Someday"
     }
 
+    # Fetch previously triaged task names (this could be a database, a file, or a list)
+    previously_triaged = set()  # Example: Replace with actual logic to fetch these from storage
+
     unassigned_tasks = fetch_unassigned_tasks()
     print(f"\n📋 You have {len(unassigned_tasks)} unassigned tasks.")
 
@@ -264,6 +266,12 @@ def triage_unassigned_tasks():
         props = task.get("properties", {})
         task_id = task["id"]
         task_name = get_task_name(props)
+
+        # Check if the task has already been triaged
+        if task_name in previously_triaged:
+            print(f"🔁 Task '{task_name}' has already been triaged. Marking as Deprecated.")
+            update_task(task_id, task_name=task_name, status="Deprecated")
+            continue
 
         print(f"\n📝 Task: '{task_name}' is 'Unassigned'.")
         print("\n[1] Low (💡)")
@@ -283,7 +291,13 @@ def triage_unassigned_tasks():
             chosen_priority = priority_mapping[user_choice]
             update_task(task_id, task_name=task_name, priority=chosen_priority)
             print(f"📌 '{task_name}' priority: {chosen_priority}")
-            if chosen_priority not in ["Someday", "Done", "Deprecated"]:
+            
+            if chosen_priority == "High":
+                # Automatically set due date to today
+                today = datetime.datetime.now(LOCAL_TIMEZONE).date().isoformat()
+                update_task(task_id, task_name=task_name, start_time=today)
+                print(f"📅 Due date for '{task_name}' set to today: {today}")
+            elif chosen_priority not in ["Someday", "Done", "Deprecated"]:
                 print("\n📅 Set a due date:")
                 print("[1] Today (🟢)")
                 print("[2] Tomorrow (🔵)")
@@ -306,24 +320,12 @@ def triage_unassigned_tasks():
                             print("⚠️ Invalid date.")
                             continue
                     due_date_str = due_date.isoformat()
-                    url = f"https://api.notion.com/v1/pages/{task_id}"
-                    payload = {
-                        "properties": {
-                            "Due": {
-                                "date": {
-                                    "start": due_date_str
-                                }
-                            }
-                        }
-                    }
-                    r = requests.patch(url, headers=headers, json=payload)
-                    if r.status_code == 200:
-                        print(f"📅 '{task_name}' due date: {due_date_str}")
-                    else:
-                        print("❌ Failed to set due date.")
+                    update_task(task_id, task_name=task_name, start_time=due_date_str)
+                    print(f"📅 '{task_name}' due date: {due_date_str}")
                     break
-        else:
-            print(f"⚠️ Invalid choice for '{task_name}'.")
+
+        # Add the task name to previously triaged set
+        previously_triaged.add(task_name)
 
 def check_for_overlap(current_schedule, proposed_start, proposed_end):
     proposed_start_utc = proposed_start.astimezone(datetime.timezone.utc)
