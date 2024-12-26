@@ -121,20 +121,24 @@ def fetch_all_tasks_sorted_by_priority_created():
     ]
     return fetch_tasks(filter_payload, sorts_payload)
 
-
-def fetch_all_tasks_sorted_by_created(assigned_time_equals=False):
+def fetch_all_tasks_sorted_by_created(assigned_time_equals=False, target_date=None):
     """
     Used for two different states: 
-    1) assigned_time_equals=False (tasks not assigned a time but due by today) 
-    2) assigned_time_equals=True  (tasks already scheduled for today).
+    1) assigned_time_equals=False (tasks not assigned a time but due by the target_date)
+    2) assigned_time_equals=True  (tasks already scheduled for the target_date).
+
+    :param assigned_time_equals: bool - indicates whether we're looking for tasks with or without an assigned time.
+    :param target_date: str in 'YYYY-MM-DD' format for the date to query. If None, defaults to today's date.
     """
-    today = datetime.datetime.now().date().isoformat()
+    if target_date is None:
+        target_date = datetime.datetime.now().date().isoformat()
+
     filter_payload = {
         "and": [
             {
                 "property": "Due",
                 "date": {
-                    "on_or_before": today
+                    "on_or_before": target_date
                 }
             },
             {
@@ -163,11 +167,12 @@ def fetch_all_tasks_sorted_by_created(assigned_time_equals=False):
             }
         ]
     }
+
     sorts_payload = [
         {"timestamp": "created_time", "direction": "ascending"}
     ]
-    return fetch_tasks(filter_payload, sorts_payload)
 
+    return fetch_tasks(filter_payload, sorts_payload)
 
 def fetch_current_schedule():
     return fetch_all_tasks_sorted_by_created(assigned_time_equals=True)
@@ -536,14 +541,94 @@ def calculate_available_time_blocks(current_schedule, start_hour=9, end_hour=23)
 
     return free_blocks
 
-
 def display_available_time_blocks(free_blocks):
     print("\n🕒 **Available Time Blocks for Today**:")
     if not free_blocks:
         print("🚫 No free time available today.")
+        response = input("Would you like to schedule for tomorrow instead? (yes/no): ").strip().lower()
+        if response == 'yes':
+            schedule_tomorrow()
+        else:
+            print("Okay, let me know if you'd like help later.")
         return
     for start, end in free_blocks:
         print(f"✅ {start.strftime('%I:%M %p')} to {end.strftime('%I:%M %p')}")
+
+def schedule_tomorrow():
+    """
+    Moves tasks due today to tomorrow,
+    then schedules them by calling schedule_tasks_in_pattern
+    starting at 9:00 AM tomorrow.
+    """
+    today_str = datetime.datetime.now(LOCAL_TIMEZONE).date().isoformat()
+    tomorrow_date = datetime.datetime.now(LOCAL_TIMEZONE).date() + datetime.timedelta(days=1)
+    tomorrow_str = tomorrow_date.isoformat()
+
+    # 1) Fetch tasks due today
+    filter_payload = {
+        "and": [
+            {
+                "property": "Due",
+                "date": {
+                    "on_or_before": today_str
+                }
+            },
+            {
+                "property": "Done",
+                "checkbox": {"equals": False}
+            }
+        ]
+    }
+    tasks_due_today = fetch_tasks(filter_payload, [])
+
+    # 2) Move them to tomorrow (date-only)
+    for task in tasks_due_today:
+        task_id = task["id"]
+        task_name = get_task_name(task["properties"])
+        update_date_only(task_id, task_name=task_name, date_str=tomorrow_str)
+        print(f"Moved '{task_name}' from {today_str} to {tomorrow_str}")
+
+    # 3) Prepare for scheduling tomorrow
+    #    We’ll assume 9:00 AM as a start time
+    # 3) Prepare for scheduling tomorrow
+    #    We’ll assume 9:00 AM as a start time
+    tomorrow_start_local = datetime.datetime.combine(
+        tomorrow_date,
+        datetime.time(hour=9, minute=0),
+    )
+    # Convert to UTC if your scheduling logic expects UTC
+    tomorrow_start_utc = tomorrow_start_local.astimezone(datetime.timezone.utc)
+
+    # 4) Fetch tasks that have not been assigned a time,
+    #    but specifically using tomorrow_str as the target date
+    tomorrow_str = tomorrow_date.isoformat()
+    tasks_post_triage = fetch_all_tasks_sorted_by_created(
+        assigned_time_equals=False,
+        target_date=tomorrow_str
+    )
+
+    non_deprecated_tasks = [
+        t for t in tasks_post_triage
+        if t.get("properties", {}).get("Status", {}).get("status", {}).get("name") != "Deprecated"
+    ]
+
+    # Remove duplicates
+    seen_ids = set()
+    unique_tasks = []
+    for t in non_deprecated_tasks:
+        if t["id"] not in seen_ids:
+            seen_ids.add(t["id"])
+            unique_tasks.append(t)
+
+    # 5) Call your scheduling pattern function
+    if unique_tasks:
+        schedule_tasks_in_pattern(
+            unique_tasks,
+            test_mode=False,
+            starting_time=tomorrow_start_utc
+        )
+    else:
+        print("\nNo tasks to schedule tomorrow after moving tasks.")
 
 
 def show_schedule_overview(current_schedule):
