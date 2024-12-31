@@ -666,8 +666,13 @@ def schedule_single_task(task,
     # Halt if it starts after 11 PM
     if start_time_local.hour >= 23:
         print(f"🚨 Scheduling halted. Start time after 11 PM: {start_time_local.strftime('%Y-%m-%d %I:%M %p %Z')}")
-        schedule_complete()
-        return None, accept_all_mode
+        response = input("Would you like to schedule for tomorrow instead? (yes/no): ").strip().lower()
+        if response == 'yes':
+            schedule_tomorrow()
+        else:
+            schedule_complete()
+            return None, accept_all_mode
+        return
 
     # Adjust if overlapping
     overlap_count = 0
@@ -887,7 +892,15 @@ def schedule_tasks_in_pattern(tasks,
         
 def schedule_complete():
     print("Scheduling complete. Have a great day!")
-
+    response = input("Would you like to schedule for tomorrow instead? (yes/no): ").strip().lower()
+    
+    if response == 'yes':
+        schedule_tomorrow()
+    elif response == 'no':
+        print("Okay, no scheduling for tomorrow. Have a great day!")
+    else:
+        print("Invalid input. Please respond with 'yes' or 'no'.")
+        schedule_complete()  # Retry the question if input is invalid.
 
 def assign_dues_and_blocks(test_mode=False):
     """
@@ -933,7 +946,7 @@ def assign_dues_and_blocks(test_mode=False):
     else:
         print("\nNo tasks to schedule after cleanup.")
 
-    print("\n🎉 **Scheduling complete! Have a great day!**")
+    schedule_complete()
 
 
 # -------------------------------------------------------------------
