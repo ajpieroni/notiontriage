@@ -7,4 +7,4 @@ venv/
 __pycache__/
 
 # Ignore other specific files, if necessary
-*.log
+*.log.DS_Store
