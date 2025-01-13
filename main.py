@@ -30,10 +30,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 logger = logging.getLogger()
 
 priority_to_time_block = {
-    "Low": 15,
-    "Medium": 15,
-    "High": 15,
-    "Must Be Done Today": 15
+    "Low": 30,
+    "Medium": 30,
+    "High": 30,
+    "Must Be Done Today": 30
 }
 
 headers = {
@@ -329,7 +329,8 @@ def triage_unassigned_tasks():
     """
     priority_mapping = {
         "1": "Low",
-        "2": "High",
+        "2": "Medium",
+        "3": "High",
         "c": "Deprecated",
         "x": "Done",
         "s": "Someday"
@@ -352,7 +353,8 @@ def triage_unassigned_tasks():
 
         print(f"\n📝 Task: '{task_name}' is 'Unassigned'.")
         print("\n[1] Low (💡)")
-        print("[2] High (🔥)")
+        print("[2] Medium (♻️)")
+        print("[3] High (🔥)")
         print("[c] Deprecated (🗑️)")
         print("[x] Done (✅)")
         print("[s] Someday (🌥️)")
