@@ -31,9 +31,9 @@ logger = logging.getLogger()
 
 priority_to_time_block = {
     "Low": 15,
-    "Medium": 30,
-    "High": 45,
-    "Must Be Done Today": 45
+    "Medium":  15,
+    "High":  15,
+    "Must Be Done Today":  15
 }
 
 headers = {
@@ -591,14 +591,10 @@ def schedule_tomorrow():
         print(f"Moved '{task_name}' from {today_str} to {tomorrow_str}")
 
     # 3) Prepare for scheduling tomorrow
-    #    We’ll assume 9:00 AM as a start time
-    # 3) Prepare for scheduling tomorrow
-    #    We’ll assume 9:00 AM as a start time
     tomorrow_start_local = datetime.datetime.combine(
         tomorrow_date,
         datetime.time(hour=9, minute=0),
     )
-    # Convert to UTC if your scheduling logic expects UTC
     tomorrow_start_utc = tomorrow_start_local.astimezone(datetime.timezone.utc)
 
     # 4) Fetch tasks that have not been assigned a time,
@@ -1083,12 +1079,18 @@ def run_gui():
 
 
 if __name__ == "__main__":
-    # Choose what to run:
-    # 1. Command-line approach with full scheduling
-    # 2. prompt_toolkit TUI for unassigned tasks
-    RUN_GUI = False  # Toggle to True to run the TUI
+    print("What would you like to do?")
+    print("[1] Just triage unassigned tasks")
+    print("[2] Schedule tasks")
+    print("[3] Both triage and schedule")
+    user_choice = input("Select an option: ").strip().lower()
 
-    if RUN_GUI:
-        run_gui()
-    else:
+    if user_choice == "1":
+        triage_unassigned_tasks()
+    elif user_choice == "2":
         assign_dues_and_blocks(test_mode=False)
+    elif user_choice == "3":
+        triage_unassigned_tasks()
+        assign_dues_and_blocks(test_mode=False)
+    else:
+        print("Invalid selection. Exiting.")
