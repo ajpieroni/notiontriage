@@ -30,10 +30,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 logger = logging.getLogger()
 
 priority_to_time_block = {
-    "Low": 15,
+    "Low": 5,
     "Medium":  15,
-    "High":  15,
-    "Must Be Done Today":  15
+    "High":  30,
+    "Must Be Done Today":  45
 }
 
 headers = {
