@@ -576,8 +576,9 @@ def always_available_blocks(start_hour=9, end_hour=23):
     """
     Returns list of all periods as available blocks
     """
-    return [(datetime.datetime.combine(datetime.datetime.now().date(), datetime.time(hour=start_hour), tzinfo=LOCAL_TIMEZONE),
-             datetime.datetime.combine(datetime.datetime.now().date(), datetime.time(hour=end_hour), tzinfo=LOCAL_TIMEZONE))]
+    now = datetime.datetime.now(LOCAL_TIMEZONE)
+    return [(datetime.datetime.combine(now.date(), datetime.time(hour=start_hour), tzinfo=LOCAL_TIMEZONE),
+             datetime.datetime.combine(now.date(), datetime.time(hour=end_hour), tzinfo=LOCAL_TIMEZONE))]
 
 
 def display_available_time_blocks(free_blocks):
