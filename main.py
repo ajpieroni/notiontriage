@@ -673,7 +673,7 @@ def show_schedule_overview(current_schedule):
     handle_overlapping_due_dates(current_schedule)
 # !TODO: make this smarter #32
 
-    free_blocks = always_available_blocks(current_schedule)
+    free_blocks = always_available_blocks(start_hour=9, end_hour=23)
     display_available_time_blocks(free_blocks)
 
 
