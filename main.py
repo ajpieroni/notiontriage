@@ -33,7 +33,7 @@ priority_to_time_block = {
     "Low": 5,
     "Medium":  15,
     "High":  30,
-    "Must Be Done Today":  45
+    "Must Be Done Today":  30
 }
 
 headers = {
@@ -50,7 +50,26 @@ def get_task_name(properties):
         return properties.get("Name", {}).get("title", [{}])[0].get("text", {}).get("content", "Unnamed Task")
     except IndexError:
         return "Unnamed Task"
-
+    
+def rename_task(task_id, new_name):
+    """
+    Updates the 'Name' property of a Notion page to a new title.
+    """
+    url = f"https://api.notion.com/v1/pages/{task_id}"
+    payload = {
+        "properties": {
+            "Name": {
+                "title": [
+                    {"text": {"content": new_name}}
+                ]
+            }
+        }
+    }
+    response = requests.patch(url, headers=headers, json=payload)
+    if response.status_code == 200:
+        logger.info(f"Task renamed to: {new_name}")
+    else:
+        logger.error(f"Failed to rename task. {response.status_code}: {response.text}")
 
 def format_date_iso(date_time_str):
     """
@@ -349,7 +368,7 @@ def triage_unassigned_tasks():
         if task_name in previously_triaged:
             print(f"🔁 Task '{task_name}' has already been triaged. Marking as Deprecated.")
             update_date_time(task_id, task_name=task_name, status="Deprecated")
-            continue
+            return
 
         print(f"\n📝 Task: '{task_name}' is 'Unassigned'.")
         print("\n[1] Low (💡)")
@@ -358,8 +377,16 @@ def triage_unassigned_tasks():
         print("[c] Deprecated (🗑️)")
         print("[x] Done (✅)")
         print("[s] Someday (🌥️)")
+        print("[r] Rename Task")
 
         user_choice = input("\nYour choice: ").strip().lower()
+
+        if user_choice == "r":
+            new_name = input("Enter new task name: ").strip()
+            rename_task(task_id, new_name)
+            print(f"Task renamed to '{new_name}'.")
+            task_name = new_name  # update in-memory name
+            user_choice = input("\nChoose priority or status [1/2/3/c/x/s]: ").strip().lower()
         if user_choice == "c":
             update_date_time(task_id, task_name=task_name, status="Deprecated")
             print(f"🗑️ '{task_name}' archived.")
@@ -543,6 +570,16 @@ def calculate_available_time_blocks(current_schedule, start_hour=9, end_hour=23)
 
     return free_blocks
 
+
+# !TODO: make this smarter #32
+def always_available_blocks(start_hour=9, end_hour=23):
+    """
+    Returns list of all periods as available blocks
+    """
+    return [(datetime.datetime.combine(datetime.datetime.now().date(), datetime.time(hour=start_hour), tzinfo=LOCAL_TIMEZONE),
+             datetime.datetime.combine(datetime.datetime.now().date(), datetime.time(hour=end_hour), tzinfo=LOCAL_TIMEZONE))]
+
+
 def display_available_time_blocks(free_blocks):
     print("\n🕒 **Available Time Blocks for Today**:")
     if not free_blocks:
@@ -633,8 +670,9 @@ def show_schedule_overview(current_schedule):
     print("\n🔍 Checking schedule overview...")
     print("\n🛠️ Resolving overlapping due dates...")
     handle_overlapping_due_dates(current_schedule)
+# !TODO: make this smarter #32
 
-    free_blocks = calculate_available_time_blocks(current_schedule)
+    free_blocks = always_available_blocks(current_schedule)
     display_available_time_blocks(free_blocks)
 
 
@@ -709,7 +747,7 @@ def schedule_single_task(task,
     print(f"\n{'='*50}")
     print(f"Task: '{task_name}' (Priority: {priority})")
     print(f"Proposed Start: {start_time_disp}, End: {end_time_disp} ({time_block_minutes} mins)")
-    print("[Y] Apply | [S] Tomorrow | [X] Deprecated | [C] Complete | [H] High | [W] +1 Week")
+    print("[Y] Apply | [S] Tomorrow | [X] Deprecated | [C] Complete | [H] High | [W] +1 Week | [R] Rename")
     print("Or type a time like '9pm' to override, or type 'ACCEPT ALL' to apply all remaining automatically:")
     print(f"{'='*50}")
 
@@ -782,7 +820,27 @@ def schedule_single_task(task,
             if task not in current_schedule:
                 current_schedule.append(task)
         return end_time_local.astimezone(datetime.timezone.utc), accept_all_mode
+    elif user_input == "R":
+        new_name = input("Enter new task name: ").strip()
+        rename_task(task_id, new_name)
+        print(f"Task renamed to '{new_name}'.")
+        
+        # Update the in-memory name
+        task_name = new_name
+        # Store new name on the 'task' object as well so subsequent calls read it correctly.
+        task["properties"]["Name"]["title"][0]["text"]["content"] = new_name
 
+        # Re-run schedule_single_task() from scratch for this same task.
+        # This way, the user sees all the original scheduling prompts again
+        # (e.g. Proposed start/end, menu choices, etc.)
+        return schedule_single_task(
+            task,
+            current_time,
+            test_mode,
+            current_schedule,
+            scheduled_task_names,
+            accept_all_mode=accept_all_mode
+        )
     elif user_input == "S":
         print(f"Task '{task_name}' deferred to tomorrow.")
         tomorrow = (start_time_local.date() + datetime.timedelta(days=1)).isoformat()
