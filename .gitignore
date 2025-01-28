@@ -8,3 +8,6 @@ __pycache__/
 
 # Ignore other specific files, if necessary
 *.log.DS_Store
+
+credentials.json
+token.json
