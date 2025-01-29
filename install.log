@@ -31,5 +31,5 @@ Using cached wcwidth-0.2.13-py2.py3-none-any.whl (34 kB)
 Installing collected packages: wcwidth, pytz, urllib3, tzlocal, python-dotenv, prompt_toolkit, idna, charset-normalizer, certifi, requests
 Successfully installed certifi-2024.12.14 charset-normalizer-3.4.0 idna-3.10 prompt_toolkit-3.0.38 python-dotenv-1.0.1 pytz-2024.2 requests-2.32.3 tzlocal-5.0.1 urllib3-2.2.3 wcwidth-0.2.13
 
-[notice] A new release of pip is available: 24.2 -> 24.3.1
+[notice] A new release of pip is available: 24.2 -> 25.0
 [notice] To update, run: pip install --upgrade pip
