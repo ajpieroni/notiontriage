@@ -623,11 +623,24 @@ def schedule_single_task(task,
     task_id = task["id"]
     task_name = get_task_name(props)
     priority = props.get("Priority", {}).get("status", {}).get("name", "Low")
+    status = props.get("Status", {}).get("status", {}).get("name", "Not started")
     time_block_minutes = priority_to_time_block.get(priority, 30)
 
     current_time_local = current_time.astimezone(LOCAL_TIMEZONE)
     start_time_local = current_time_local
     end_time_local = start_time_local + datetime.timedelta(minutes=time_block_minutes)
+    
+    # Ensure "Not Started [later]" tasks are scheduled after 6 PM
+    if status == "Not started [later]":
+        start_time_local = current_time.astimezone(LOCAL_TIMEZONE)
+        if start_time_local.hour < 18:
+            start_time_local = start_time_local.replace(hour=18, minute=0, second=0)
+            end_time_local = start_time_local + datetime.timedelta(minutes=30)
+            print(f"📌 Adjusting '{task_name}' to start after 6 PM.")
+        else:
+            end_time_local = start_time_local + datetime.timedelta(minutes=30)
+    else:
+        end_time_local = current_time + datetime.timedelta(minutes=30)
 
     if (start_time_local.hour >= 23) and (not allow_late_night_scheduling) and (not ignore_availability_mode):
         print(f"🚨 We have reached {start_time_local.strftime('%I:%M %p')} which is after 11 PM.")
