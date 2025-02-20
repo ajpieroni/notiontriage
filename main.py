@@ -591,7 +591,7 @@ def schedule_tomorrow():
 def show_schedule_overview(current_schedule):
     print("\n🔍 Checking schedule overview...")
     print("\n🛠️ Resolving overlapping due dates...")
-    handle_overlapping_due_dates(current_schedule)
+    # handle_overlapping_due_dates(current_schedule)
 
     free_blocks = always_available_blocks(start_hour=9, end_hour=23)
     display_available_time_blocks(free_blocks)
