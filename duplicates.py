@@ -132,8 +132,9 @@ def mark_duplicate_tasks_as_deprecated(tasks, deprecated):
             # Log created times for debugging purposes
             for task in sorted_group:
                 logger.debug(f"Task ID {task['id']} created at {task.get('created_time')}")
-            # Keep the first (oldest) and mark all others as Deprecated.
-            for task in sorted_group[1:]:
+            # Keep the newest task and mark the rest as Deprecated
+            
+            for task in sorted_group[:-1]:
                 task_id = task["id"]
                 logger.info(f"Marking task '{name}' (ID: {task_id}) as Deprecated.")
                 deprecated += 1;
