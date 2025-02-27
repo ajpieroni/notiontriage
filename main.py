@@ -44,6 +44,17 @@ headers = {
 
 
 # --------------------------- UTILS & HELPERS ---------------------------
+daily_tasks = [
+    "Play back in chess",
+    "Drink an Owala",
+    "Write 5 Sentences for Blog",
+    "Italian Anki",
+    "Call someone you don't call often (@Yap Directory)",
+    "Shave",
+    "Brush Teeth",
+    "Shower",
+    "Morning Routine"
+]
 
 def get_task_name(properties):
     try:
@@ -327,6 +338,23 @@ def triage_unassigned_tasks():
             print(f"🔁 Task '{task_name}' has already been triaged. Marking as Deprecated.")
             update_date_time(task_id, task_name=task_name, status="Deprecated")
             return
+        # Check if the task is one of the specified daily tasks
+        if task_name in daily_tasks:
+            # Set priority to Low
+            update_date_time(task_id, task_name=task_name, priority="Low")
+            
+            # Determine the due time: now or 7:30 AM today, whichever is earlier
+            now = datetime.datetime.now(LOCAL_TIMEZONE)
+            seven_thirty = datetime.datetime.combine(now.date(), datetime.time(7, 30), tzinfo=LOCAL_TIMEZONE)
+            due_time = now if now < seven_thirty else seven_thirty
+            
+            due_time_iso = due_time.isoformat()
+            
+            # Set the due date with the computed time (using update_date_time for time-specific updates)
+            update_date_time(task_id, task_name=task_name, start_time=due_time_iso, end_time=due_time_iso)
+            
+            print(f"📌 '{task_name}' recognized as a daily task. Set to Low priority and due at {due_time_iso}.")
+            continue
 
         print(f"\n📝 Task: '{task_name}' is 'Unassigned'.")
         print("\n[1] Low (💡)")
