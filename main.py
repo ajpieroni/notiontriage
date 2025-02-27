@@ -44,6 +44,17 @@ headers = {
 
 
 # --------------------------- UTILS & HELPERS ---------------------------
+daily_tasks = [
+    "Play back in chess",
+    "Drink an Owala",
+    "Write 5 Sentences for Blog",
+    "Italian Anki",
+    "Call someone you don't call often (@Yap Directory)",
+    "Shave",
+    "Brush Teeth",
+    "Shower",
+    "Morning Routine"
+]
 
 def get_task_name(properties):
     try:
@@ -327,6 +338,23 @@ def triage_unassigned_tasks():
             print(f"🔁 Task '{task_name}' has already been triaged. Marking as Deprecated.")
             update_date_time(task_id, task_name=task_name, status="Deprecated")
             return
+        # Check if the task is one of the specified daily tasks
+        if task_name in daily_tasks:
+            # Set priority to Low
+            update_date_time(task_id, task_name=task_name, priority="Low")
+            
+            # Determine the due time: now or 7:30 AM today, whichever is earlier
+            now = datetime.datetime.now(LOCAL_TIMEZONE)
+            seven_thirty = datetime.datetime.combine(now.date(), datetime.time(7, 30), tzinfo=LOCAL_TIMEZONE)
+            due_time = now if now < seven_thirty else seven_thirty
+            
+            due_time_iso = due_time.isoformat()
+            
+            # Set the due date with the computed time (using update_date_time for time-specific updates)
+            update_date_time(task_id, task_name=task_name, start_time=due_time_iso, end_time=due_time_iso)
+            
+            print(f"📌 '{task_name}' recognized as a daily task. Set to Low priority and due at {due_time_iso}.")
+            continue
 
         print(f"\n📝 Task: '{task_name}' is 'Unassigned'.")
         print("\n[1] Low (💡)")
@@ -355,38 +383,39 @@ def triage_unassigned_tasks():
             chosen_priority = priority_mapping[user_choice]
             update_date_time(task_id, task_name=task_name, priority=chosen_priority)
             print(f"📌 '{task_name}' priority: {chosen_priority}")
+            
 
-            if chosen_priority == "High":
-                today_local_date = datetime.datetime.now(LOCAL_TIMEZONE).date().isoformat()
-                update_date_only(task_id, task_name=task_name, date_str=today_local_date)
-                print(f"📅 Due date for '{task_name}' set to today: {today_local_date}")
+            # if chosen_priority == "High":
+            today_local_date = datetime.datetime.now(LOCAL_TIMEZONE).date().isoformat()
+            update_date_only(task_id, task_name=task_name, date_str=today_local_date)
+            print(f"📅 Due date for '{task_name}' set to today: {today_local_date}")
 
-            elif chosen_priority not in ["Someday", "Done", "Deprecated"]:
-                print("\n📅 Set a due date:")
-                print("[1] Today (🟢)")
-                print("[2] Tomorrow (🔵)")
-                print("[3] Next Week (📆)")
-                print("Or type e.g. 'Jan 2025'")
-                while True:
-                    due_choice = input("\nDue date choice: ").strip()
-                    today = datetime.datetime.now(LOCAL_TIMEZONE).date()
-                    if due_choice == "1":
-                        due_date = today
-                    elif due_choice == "2":
-                        due_date = today + datetime.timedelta(days=1)
-                    elif due_choice == "3":
-                        due_date = today + datetime.timedelta(days=7)
-                    else:
-                        parsed = parse_custom_date(due_choice)
-                        if parsed:
-                            due_date = parsed
-                        else:
-                            print("⚠️ Invalid date.")
-                            continue
-                    due_date_str = due_date.isoformat()
-                    update_date_only(task_id, task_name=task_name, date_str=due_date_str)
-                    print(f"📅 '{task_name}' due date: {due_date_str}")
-                    break
+            # elif chosen_priority not in ["Someday", "Done", "Deprecated"]:
+            #     print("\n📅 Set a due date:")
+            #     print("[1] Today (🟢)")
+            #     print("[2] Tomorrow (🔵)")
+            #     print("[3] Next Week (📆)")
+            #     print("Or type e.g. 'Jan 2025'")
+            #     while True:
+            #         due_choice = input("\nDue date choice: ").strip()
+            #         today = datetime.datetime.now(LOCAL_TIMEZONE).date()
+            #         if due_choice == "1":
+            #             due_date = today
+            #         elif due_choice == "2":
+            #             due_date = today + datetime.timedelta(days=1)
+            #         elif due_choice == "3":
+            #             due_date = today + datetime.timedelta(days=7)
+            #         else:
+            #             parsed = parse_custom_date(due_choice)
+            #             if parsed:
+            #                 due_date = parsed
+            #             else:
+            #                 print("⚠️ Invalid date.")
+            #                 continue
+            #         due_date_str = due_date.isoformat()
+            #         update_date_only(task_id, task_name=task_name, date_str=due_date_str)
+            #         print(f"📅 '{task_name}' due date: {due_date_str}")
+            #         break
 
         previously_triaged.add(task_name)
 
