@@ -107,17 +107,24 @@ def parse_custom_date(input_str):
 
 def fetch_tasks(filter_payload, sorts_payload):
     url = f"https://api.notion.com/v1/databases/{DATABASE_ID}/query"
+    all_tasks = []
     payload = {
         "filter": filter_payload,
         "sorts": sorts_payload,
-        "page_size": 500
+        "page_size": 100
     }
-    response = requests.post(url, headers=headers, json=payload)
-    if response.status_code == 200:
-        return response.json().get("results", [])
-    else:
-        logger.error(f"Failed to fetch tasks. Status: {response.status_code}, {response.text}")
-        return []
+    while True:
+        response = requests.post(url, headers=headers, json=payload)
+        if response.status_code != 200:
+            logger.error(f"Failed to fetch tasks. Status: {response.status_code}, {response.text}")
+            break
+        data = response.json()
+        tasks = data.get("results", [])
+        all_tasks.extend(tasks)
+        if not data.get("has_more"):
+            break
+        payload["start_cursor"] = data.get("next_cursor")
+    return all_tasks
 
 def fetch_all_tasks_sorted_by_priority_created():
     filter_payload = {
