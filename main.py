@@ -70,8 +70,7 @@ daily_tasks = [
     "Meal Plan",
     "Block out lunch & dinners for the week",
     "Call someone you don't call often (",
-    "NYT Mini",
-    "Forest Prune"
+    "NYT Mini"
     
 ]
 
