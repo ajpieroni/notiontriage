@@ -53,7 +53,8 @@ daily_tasks = [
     "Shave",
     "Brush Teeth",
     "Shower",
-    "Morning Routine"
+    "Morning Routine",
+    "Forest Prune"
 ]
 
 def get_task_name(properties):
