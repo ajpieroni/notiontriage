@@ -53,7 +53,25 @@ daily_tasks = [
     "Shave",
     "Brush Teeth",
     "Shower",
-    "Morning Routine"
+    "Morning Routine",
+    "Budget Reset",
+    "Kyros HW Check",
+    "Book Office Room",
+    "Clean Slate",
+    "Reconcile",
+    "Duolingo",
+    "Shower",
+    "Clean Room",
+    "Shave",
+    "Clean out Backpack",
+    "Weekly Reset",
+    "Pay Off Credit Cards",
+    "Play back in chess",
+    "Meal Plan",
+    "Block out lunch & dinners for the week",
+    "Call someone you don't call often (",
+    "NYT Mini"
+    
 ]
 
 def get_task_name(properties):
