@@ -1,19 +1,12 @@
 import re
 import subprocess
-def clean_task_list(messy_input):
-    print("messy input:", messy_input)
-    """Extracts issue titles from messy text and formats them for kyros.sh"""
-    
-    # split messy input by ne
-    issues = messy_input.split("\n")
-    # issues = re.findall(r'Issue\s+(.*?)\n', messy_input)  # Extract issue titles
-    print("issues 1:", issues)
-    issues = [issue.strip() for issue in issues if issue.strip()]  # Remove extra spaces
-    print("issues 2:", issues)
 
-    # Generate the formatted command
-    command = './kyros.sh \\\n    ' + ' \\\n    '.join(f'"{issue}"' for issue in issues)
-    return command
+def clean_task_list(messy_input):
+    """Extracts issue titles from messy text and formats them for the chosen target script."""
+    # Split messy input by newline and filter out empty lines
+    issues = messy_input.split("\n")
+    issues = [issue.strip() for issue in issues if issue.strip()]
+    return issues
 
 # Read messy input from the file once
 with open("messy_input.txt", "r") as file:
@@ -21,16 +14,32 @@ with open("messy_input.txt", "r") as file:
     print("DEBUG: Content of messy_input.txt:")
     print(messy_text)
 
-# Generate and print the cleaned command
-cleaned_command = clean_task_list(messy_text)
-print("\nGenerated Command:\n")
-print(cleaned_command)
+# Extract the issues from the messy input
+issues = clean_task_list(messy_text)
 
-# Ask user if they want to run the command
-run_choice = input("\nRun tasks.py with these tasks? (y/n): ")
-if run_choice.lower() == "y":
+# For debugging, show all extracted lines
+print("\nExtracted Lines:")
+for line in issues:
+    print(f'- {line}')
+
+# Ask the user which target they want to run
+target = input("\nWhich command do you want to run? (colab, kyros, class): ").strip().lower()
+if target not in ["colab", "kyros", "class"]:
+    print("Invalid selection. Defaulting to 'kyros'.")
+    target = "kyros"
+
+# Generate the command for the chosen target.
+# This will call, for example, "./kyros.sh" and pass each issue as an argument.
+# Here, we assume every non-empty line in messy_input.txt is a task.
+formatted_args = ' \\\n    '.join(f'"{line}"' for line in issues if len(line) >= 10)
+command = f'./{target}.sh \\\n    {formatted_args}'
+print("\nGenerated Command:\n")
+print(command)
+
+# Ask user for confirmation
+run_choice = input("\nRun the above command? (y/n): ").strip().lower()
+if run_choice == "y":
     print("🚀 Running command...")
-    # Run the cleaned command using subprocess
-    subprocess.call(cleaned_command, shell=True)
+    subprocess.call(command, shell=True)
 else:
     print("Command not executed.")
