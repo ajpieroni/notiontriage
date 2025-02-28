@@ -40,7 +40,7 @@ for TASK_TITLE in "$@"; do
           ]
         },
         "Class": {
-          "select": { "name": "Academics" }
+          "select": { "name": "Co-Lab" }
         }
       }
     }'

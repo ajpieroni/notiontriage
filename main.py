@@ -71,7 +71,9 @@ daily_tasks = [
     "Block out lunch & dinners for the week",
     "Call someone you don't call often (",
     "NYT Mini",
-    "Forest Prune"
+    "Forest Prune",
+    "Schedule Day",
+    "Drink and Owala"
     
 ]
 
@@ -651,14 +653,30 @@ def show_schedule_overview(current_schedule):
     free_blocks = always_available_blocks(start_hour=9, end_hour=23)
     display_available_time_blocks(free_blocks)
 
+# def wrap_to_9am_if_needed(dt: datetime.datetime) -> datetime.datetime:
+#     local_dt = dt.astimezone(LOCAL_TIMEZONE)
+#     if local_dt.hour >= 23:
+#         new_local = local_dt.replace(hour=9, minute=0, second=0, microsecond=0)
+#         return new_local.astimezone(datetime.timezone.utc)
+#     return dt
+
 def wrap_to_9am_if_needed(dt: datetime.datetime) -> datetime.datetime:
+    # Convert the given datetime to your local timezone.
     local_dt = dt.astimezone(LOCAL_TIMEZONE)
+    now_local = datetime.datetime.now(LOCAL_TIMEZONE)
+    
+    # If the time is 11pm or later, schedule for the next day at 9am.
     if local_dt.hour >= 23:
-        new_local = local_dt.replace(hour=9, minute=0, second=0, microsecond=0)
-        return new_local.astimezone(datetime.timezone.utc)
-    return dt
+        # Add one day and set the time to 9:00am.
+        candidate = (local_dt + datetime.timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
+    else:
+        candidate = local_dt
 
-
+    # Ensure we never schedule a task in the past.
+    final_local = max(candidate, now_local)
+    
+    # Return the result in UTC.
+    return final_local.astimezone(datetime.timezone.utc)
 # --------------------------- NEW schedule_complete FUNCTION ---------------------------
 def schedule_complete():
     print("Scheduling is complete!")
