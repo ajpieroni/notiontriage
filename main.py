@@ -74,7 +74,6 @@ daily_tasks = [
     "Forest Prune",
     "Schedule Day",
     "Drink and Owala"
-    
 ]
 
 def get_task_name(properties):
