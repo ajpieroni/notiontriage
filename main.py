@@ -659,20 +659,19 @@ def show_schedule_overview(current_schedule):
 #         new_local = local_dt.replace(hour=9, minute=0, second=0, microsecond=0)
 #         return new_local.astimezone(datetime.timezone.utc)
 #     return dt
-
-def wrap_to_9am_if_needed(dt: datetime.datetime) -> datetime.datetime:
-    # Convert the given datetime to your local timezone.
+def wrap_to_9am_if_needed(dt: datetime.datetime, target_date: datetime.date) -> datetime.datetime:
+    # Convert the given datetime to local time
     local_dt = dt.astimezone(LOCAL_TIMEZONE)
-    now_local = datetime.datetime.now(LOCAL_TIMEZONE)
     
-    # If the time is 11pm or later, schedule for the next day at 9am.
-    if local_dt.hour >= 23:
-        # Add one day and set the time to 9:00am.
-        candidate = (local_dt + datetime.timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
+    # If the task's date is not the target date or it's past 11 PM on the target date,
+    # reset the time to 9:00 AM of the target date.
+    if local_dt.date() != target_date or local_dt.hour >= 23:
+        candidate = datetime.datetime.combine(target_date, datetime.time(9, 0), tzinfo=LOCAL_TIMEZONE)
     else:
         candidate = local_dt
 
-    # Ensure we never schedule a task in the past.
+    # Ensure we don't schedule in the past relative to now in local time.
+    now_local = datetime.datetime.now(LOCAL_TIMEZONE)
     final_local = max(candidate, now_local)
     
     # Return the result in UTC.
@@ -741,10 +740,12 @@ def schedule_single_task(task,
             return None, allow_late_night_scheduling, ignore_availability_mode, accept_all_mode
 
     if ignore_availability_mode:
-        start_time_local_9 = wrap_to_9am_if_needed(start_time_local)
+    # Determine target date based on the current scheduling mode (today or tomorrow)
+        target_date = start_time_local.astimezone(LOCAL_TIMEZONE).date()
+        start_time_local_9 = wrap_to_9am_if_needed(start_time_local, target_date)
         if start_time_local_9 != start_time_local:
             start_time_local = start_time_local_9
-            end_time_local = start_time_local_9 + datetime.timedelta(minutes=time_block_minutes)
+            end_time_local = start_time_local + datetime.timedelta(minutes=time_block_minutes)
     else:
         overlap_count = 0
         while check_for_overlap(current_schedule, start_time_local, end_time_local):
