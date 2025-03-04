@@ -169,6 +169,7 @@ def fetch_unscheduled_tasks_for_class(task_class):
             {"property": "Due", "date": {"equals": today}},
             {"property": "Class", "select": {"equals": task_class}},
             {"property": "Done", "checkbox": {"equals": False}},
+            {"property": "Assigned time", "checkbox": {"equals": False},}
         ]
     }
     sorts_payload = [{"timestamp": "created_time", "direction": "ascending"}]

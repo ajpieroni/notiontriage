@@ -669,14 +669,14 @@ def schedule_single_task(task, current_time, test_mode, current_schedule, schedu
         if start_time_local_9 != start_time_local:
             start_time_local = start_time_local_9
             end_time_local = start_time_local + datetime.timedelta(minutes=time_block_minutes)
-    else:
-        overlap_count = 0
-        while check_for_overlap(current_schedule, start_time_local, end_time_local):
-            overlap_count += 1
-            start_time_local = end_time_local
-            end_time_local = start_time_local + datetime.timedelta(minutes=time_block_minutes)
-        if overlap_count > 0:
-            print(f"Adjusted schedule {overlap_count} times to find a free slot for '{task_name}'.")
+    # else:
+    #     overlap_count = 0
+    #     while check_for_overlap(current_schedule, start_time_local, end_time_local):
+    #         overlap_count += 1
+    #         start_time_local = end_time_local
+    #         end_time_local = start_time_local + datetime.timedelta(minutes=time_block_minutes)
+    #     if overlap_count > 0:
+    #         print(f"Adjusted schedule {overlap_count} times to find a free slot for '{task_name}'.")
 
     start_time_disp = start_time_local.strftime("%Y-%m-%d %I:%M %p %Z")
     end_time_disp = end_time_local.strftime("%Y-%m-%d %I:%M %p %Z")
