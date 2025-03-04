@@ -60,6 +60,35 @@ headers = {
     "Notion-Version": "2022-06-28",
 }
 
+# --------------------------- DAILY TASKS ---------------------------
+daily_tasks = set([
+    "Play back in chess",
+    "Drink an Owala",
+    "Write 5 Sentences for Blog",
+    "Italian Anki",
+    "Call someone you don't call often (@Yap Directory)",
+    "Shave",
+    "Brush Teeth",
+    "Shower",
+    "Morning Routine",
+    "Budget Reset",
+    "Kyros HW Check",
+    "Book Office Room",
+    "Clean Slate",
+    "Reconcile",
+    "Duolingo",
+    "Clean Room",
+    "Clean out Backpack",
+    "Weekly Reset",
+    "Pay Off Credit Cards",
+    "Meal Plan",
+    "Block out lunch & dinners for the week",
+    "NYT Mini",
+    "Forest Prune",
+    "Schedule Day",
+    "Drink and Owala"
+])
+
 # --------------------------- UTILS ---------------------------
 def get_task_name(properties):
     try:
@@ -68,6 +97,18 @@ def get_task_name(properties):
         return "Unnamed Task"
 
 # --------------------------- NOTION API FUNCTIONS ---------------------------
+def fetch_unscheduled_tasks_for_class(task_class):
+    today = datetime.datetime.now().date().isoformat()
+    filter_payload = {
+        "and": [
+            {"property": "Due", "date": {"equals": today}},
+            {"property": "Class", "select": {"equals": task_class}},
+            {"property": "Done", "checkbox": {"equals": False}},
+        ]
+    }
+    sorts_payload = [{"timestamp": "created_time", "direction": "ascending"}]
+    return fetch_tasks(filter_payload, sorts_payload)
+
 def fetch_tasks(filter_payload, sorts_payload):
     url = f"https://api.notion.com/v1/databases/{DATABASE_ID}/query"
     all_tasks = []
@@ -85,63 +126,11 @@ def fetch_tasks(filter_payload, sorts_payload):
         payload["start_cursor"] = data.get("next_cursor")
     return all_tasks
 
-def fetch_unscheduled_tasks_for_class(task_class):
-    """
-    Fetch tasks due today with the given class and that don't already have an end time.
-    """
-    today = datetime.datetime.now().date().isoformat()
-    filter_payload = {
-        "and": [
-            {"property": "Due", "date": {"equals": today}},
-            {"property": "Class", "select": {"equals": task_class}},
-            {"property": "Done", "checkbox": {"equals": False}},
-        ]
-    }
-    sorts_payload = [{"timestamp": "created_time", "direction": "ascending"}]
-    tasks = fetch_tasks(filter_payload, sorts_payload)
-    unscheduled = []
-    for task in tasks:
-        due = task.get("properties", {}).get("Due", {}).get("date", {})
-        # Only include if "end" is not set (i.e. unscheduled)
-        if not due.get("end"):
-            unscheduled.append(task)
-    return unscheduled
-
-def update_date_time(task_id, task_name=None, start_time=None, end_time=None, priority=None, status=None):
-    url = f"https://api.notion.com/v1/pages/{task_id}"
-    payload = {"properties": {}}
-    if start_time:
-        start_dt = datetime.datetime.fromisoformat(start_time)
-        start_time = start_dt.astimezone(LOCAL_TIMEZONE).isoformat()
-    if end_time:
-        end_dt = datetime.datetime.fromisoformat(end_time)
-        end_time = end_dt.astimezone(LOCAL_TIMEZONE).isoformat()
-    if start_time or end_time:
-        date_payload = {}
-        if start_time:
-            date_payload["start"] = start_time
-        if end_time:
-            date_payload["end"] = end_time
-        payload["properties"]["Due"] = {"date": date_payload}
-    if priority:
-        payload["properties"]["Priority"] = {"status": {"name": priority}}
-    if status:
-        payload["properties"]["Status"] = {"status": {"name": status}}
-    response = requests.patch(url, headers=headers, json=payload)
-    if response.status_code != 200:
-        logger.error(f"Failed to update Task '{task_name}'. Status: {response.status_code}, {response.text}")
-
 # --------------------------- GOOGLE CALENDAR FUNCTIONS ---------------------------
-def fetch_calendar_events(chosen_date=None):
-    """Fetch all calendar events for the given date (defaults to today)."""
+def fetch_calendar_events():
     local_tz = tzlocal.get_localzone()
-    now_local = datetime.datetime.now(local_tz).replace(second=0, microsecond=0)
-    if not chosen_date:
-        chosen_date = now_local.date()
-    start_of_day = datetime.datetime.combine(chosen_date, datetime.time(0, 0), tzinfo=local_tz)
+    start_of_day = datetime.datetime.combine(datetime.datetime.now().date(), datetime.time(0, 0), tzinfo=local_tz)
     end_of_day = start_of_day + datetime.timedelta(days=1)
-    time_min = start_of_day.isoformat()
-    time_max = end_of_day.isoformat()
     events = []
     creds = None
     if os.path.exists("token.json"):
@@ -160,71 +149,105 @@ def fetch_calendar_events(chosen_date=None):
             try:
                 events_result = service.events().list(
                     calendarId=cal_id,
-                    timeMin=time_min,
-                    timeMax=time_max,
+                    timeMin=start_of_day.isoformat(),
+                    timeMax=end_of_day.isoformat(),
                     maxResults=50,
                     singleEvents=True,
                     orderBy="startTime"
                 ).execute()
-                cal_events = events_result.get("items", [])
-                events.extend(cal_events)
+                events.extend(events_result.get("items", []))
             except HttpError as error:
                 logger.error(f"Failed to fetch events for calendar {cal_id}: {error}")
     except HttpError as error:
         logger.error(f"An error occurred: {error}")
     return events
 
-def get_event_by_name(events, event_name):
-    """Return the first event whose summary contains the event_name (case-insensitive)."""
-    for event in events:
-        summary = event.get("summary", "")
-        if event_name.lower() in summary.lower():
-            return event
-    return None
+def get_events_by_name(events, event_name):
+    return sorted(
+        [event for event in events if event_name.lower() in event.get("summary", "").lower()],
+        key=lambda e: e.get("start", {}).get("dateTime", e.get("start", {}).get("date"))
+    )
 
-# --------------------------- CALENDAR TO TASK MAPPING ---------------------------
-# Define the mappings: Calendar Event Name -> Task Class
+# --------------------------- TASK SCHEDULING ---------------------------
 calendar_task_mapping = {
-    "TEC Office Hours": "Co-Lab",
     "Academics": "Academics",
-    "Kyros": "Kyros"
+    "Kyros": "Kyros",
+    "TEC Office Hours": "Co-Lab",
 }
-
+def update_date_time(task_id, task_name, start_time, end_time):
+    url = f"https://api.notion.com/v1/pages/{task_id}"
+    payload = {
+        "properties": {
+            "Due": {"date": {"start": start_time, "end": end_time}}
+        }
+    }
+    response = requests.patch(url, headers=headers, json=payload)
+    if response.status_code != 200:
+        logger.error(f"Failed to update Task '{task_name}'. Status: {response.status_code}, {response.text}")
+    else:
+        print(f"✅ Task '{task_name}' scheduled from {start_time} to {end_time}.")
+        
 def schedule_tasks_for_mapping(event_name, task_class):
-    """Schedule unscheduled tasks for the given task_class within the event block identified by event_name."""
     print(f"\nProcessing mapping: '{event_name}' -> '{task_class}'")
+
     events = fetch_calendar_events()
-    event = get_event_by_name(events, event_name)
-    if not event:
-        logger.error(f"No event found for '{event_name}'. Skipping tasks with class '{task_class}'.")
+    matching_events = get_events_by_name(events, event_name)
+
+    if not matching_events:
+        logger.warning(f"No events found for '{event_name}'. Skipping.")
         return
-    start_obj = event.get("start", {})
-    event_start = start_obj.get("dateTime", start_obj.get("date"))
-    if not event_start:
-        logger.error(f"Event '{event_name}' is missing a valid start time. Skipping tasks with class '{task_class}'.")
-        return
-    # Fetch unscheduled tasks for the specified class
+
     tasks = fetch_unscheduled_tasks_for_class(task_class)
     if not tasks:
-        print(f"No unscheduled tasks with class '{task_class}' found for today.")
+        logger.warning(f"No unscheduled tasks found for '{task_class}'. Skipping.")
         return
-    print(f"Found {len(tasks)} unscheduled '{task_class}' task(s).")
-    # Set initial current start to event start
-    current_start_dt = datetime.datetime.fromisoformat(event_start).astimezone(LOCAL_TIMEZONE)
-    for task in tasks:
-        task_id = task["id"]
-        task_name = get_task_name(task.get("properties", {}))
-        task_priority = task.get("properties", {}).get("Priority", {}).get("status", {}).get("name", "Low")
-        duration = priority_to_time_block.get(task_priority, TASK_LENGTH_LOW)
-        new_end_dt = current_start_dt + datetime.timedelta(minutes=duration)
-        update_date_time(task_id, task_name=task_name, start_time=current_start_dt.isoformat(), end_time=new_end_dt.isoformat())
-        print(f"Scheduled '{task_name}' (Priority: {task_priority}) from {current_start_dt.isoformat()} to {new_end_dt.isoformat()}.")
-        current_start_dt = new_end_dt  # Update current start for next task
 
+    unscheduled_tasks = tasks[:]  # Copy the list to track remaining tasks
+    while unscheduled_tasks:
+        new_unscheduled_tasks = []  # To track tasks that still don't fit
+
+        for event in matching_events:
+            event_start = event.get("start", {}).get("dateTime", event.get("start", {}).get("date"))
+            event_end = event.get("end", {}).get("dateTime", event.get("end", {}).get("date"))
+
+            if not event_start or not event_end:
+                logger.warning(f"Event '{event_name}' is missing start or end time. Skipping.")
+                continue
+
+            current_start_dt = datetime.datetime.fromisoformat(event_start).astimezone(LOCAL_TIMEZONE)
+            event_end_dt = datetime.datetime.fromisoformat(event_end).astimezone(LOCAL_TIMEZONE)
+
+            # Fill the event with remaining tasks
+            task_index = 0
+            while task_index < len(unscheduled_tasks) and current_start_dt + datetime.timedelta(minutes=TASK_LENGTH_MEDIUM) <= event_end_dt:
+                task = unscheduled_tasks[task_index]
+                task_name = get_task_name(task["properties"])
+                task_id = task["id"]
+                duration = priority_to_time_block.get("Medium", TASK_LENGTH_MEDIUM)
+                new_end_dt = current_start_dt + datetime.timedelta(minutes=duration)
+
+                update_date_time(task_id, task_name, current_start_dt.isoformat(), new_end_dt.isoformat())
+
+                print(f"✅ Task '{task_name}' scheduled from {current_start_dt} to {new_end_dt}.")
+                
+                # Move to the next time block
+                current_start_dt = new_end_dt
+                task_index += 1
+
+            # Track remaining tasks that weren't scheduled in this iteration
+            new_unscheduled_tasks.extend(unscheduled_tasks[task_index:])
+
+        # If we made no progress, exit the loop to avoid infinite looping
+        if len(new_unscheduled_tasks) == len(unscheduled_tasks):
+            logger.warning(f"Could not schedule {len(new_unscheduled_tasks)} remaining tasks.")
+            break
+
+        # Update unscheduled tasks list
+        unscheduled_tasks = new_unscheduled_tasks
+        
 def main():
-    # Loop through all mappings and schedule tasks accordingly
     for event_name, task_class in calendar_task_mapping.items():
-        schedule_tasks_for_mapping(event_name, task_class)
+        schedule_tasks_for_mapping(event_name, task_class)  # Ensure it runs for all mappings
 
 if __name__ == "__main__":
     main()
