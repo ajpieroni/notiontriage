@@ -160,6 +160,8 @@ def fetch_all_tasks_sorted_by_priority_created():
             {"property": "Status", "status": {"does_not_equal": "Waiting on Reply"}},
             {"property": "Status", "status": {"does_not_equal": "Waiting on other task"}},
             {"property": "Done", "checkbox": {"equals": False}},
+            # Optionally, you can uncomment and define start_time/end_time if needed:
+            # {"property": "Due", "date": {"start": start_time, "end": end_time}}
         ]
     }
     sorts_payload = [
