@@ -36,6 +36,21 @@ load_dotenv()
 
 NOTION_API_KEY = os.getenv("NOTION_API_KEY")
 DATABASE_ID = os.getenv("DATABASE_ID")
+
+# Read task length values from env (defaults provided)
+TASK_LENGTH_LOW = int(os.getenv("TASK_LENGTH_LOW", 30))
+TASK_LENGTH_MEDIUM = int(os.getenv("TASK_LENGTH_MEDIUM", 60))
+TASK_LENGTH_HIGH = int(os.getenv("TASK_LENGTH_HIGH", 90))
+TASK_LENGTH_MUST_BE_DONE_TODAY = int(os.getenv("TASK_LENGTH_MUST_BE_DONE_TODAY", 90))
+
+# Map priority to task length (in minutes)
+priority_to_time_block = {
+    "Low": TASK_LENGTH_LOW,
+    "Medium": TASK_LENGTH_MEDIUM,
+    "High": TASK_LENGTH_HIGH,
+    "Must Be Done Today": TASK_LENGTH_MUST_BE_DONE_TODAY,
+}
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 logger = logging.getLogger()
 
@@ -51,14 +66,6 @@ def get_task_name(properties):
         return properties.get("Name", {}).get("title", [{}])[0].get("text", {}).get("content", "Unnamed Task")
     except IndexError:
         return "Unnamed Task"
-
-def format_date_iso(date_time_str):
-    try:
-        dt = datetime.datetime.fromisoformat(date_time_str)
-        return dt.date().isoformat()
-    except ValueError:
-        logger.error(f"Invalid date-time string: {date_time_str}")
-        return None
 
 # --------------------------- NOTION API FUNCTIONS ---------------------------
 def fetch_tasks(filter_payload, sorts_payload):
@@ -81,7 +88,6 @@ def fetch_tasks(filter_payload, sorts_payload):
 def fetch_colab_tasks():
     """Fetch tasks due within today with Class 'Co-Lab'."""
     today = datetime.datetime.now().date().isoformat()
-    # Use "equals" to fetch tasks due exactly today.
     filter_payload = {
         "and": [
             {"property": "Due", "date": {"equals": today}},
@@ -96,7 +102,6 @@ def update_date_time(task_id, task_name=None, start_time=None, end_time=None, pr
     url = f"https://api.notion.com/v1/pages/{task_id}"
     payload = {"properties": {}}
     if start_time:
-        # Convert string to datetime and then to local ISO
         start_dt = datetime.datetime.fromisoformat(start_time)
         start_time = start_dt.astimezone(LOCAL_TIMEZONE).isoformat()
     if end_time:
@@ -168,35 +173,45 @@ def get_tec_office_hours_event(events):
             return event
     return None
 
-# --------------------------- MAIN LOGIC ---------------------------
-def main():
-    # Fetch today's calendar events and extract the TEC Office Hours event.
+# --------------------------- TASK SCHEDULING FOR COLAB ---------------------------
+def schedule_colab_tasks():
+    """
+    Fetch all Co-Lab tasks due today and schedule them back-to-back within the TEC Office Hours block.
+    Each task's length is determined by its priority (using environment-defined values).
+    """
+    # Fetch today's TEC Office Hours event
     cal_events = fetch_calendar_events()
     tec_event = get_tec_office_hours_event(cal_events)
     if not tec_event:
         logger.error("No TEC Office Hours event found for today. Aborting scheduling.")
         return
-    # Extract start and end times from the TEC event.
     start_obj = tec_event.get("start", {})
-    end_obj = tec_event.get("end", {})
-    start_time = start_obj.get("dateTime", start_obj.get("date"))
-    end_time = end_obj.get("dateTime", end_obj.get("date"))
-    if not start_time or not end_time:
-        logger.error("TEC Office Hours event is missing valid start or end times. Aborting scheduling.")
+    event_start = start_obj.get("dateTime", start_obj.get("date"))
+    if not event_start:
+        logger.error("TEC Office Hours event is missing a valid start time. Aborting scheduling.")
         return
 
-    # Fetch all tasks due within today with Class 'Co-Lab'
+    # Fetch Co-Lab tasks due today
     colab_tasks = fetch_colab_tasks()
     if not colab_tasks:
-        print("No Co-Lab tasks due within today found.")
+        print("No Co-Lab tasks due today found.")
         return
 
-    print(f"Found {len(colab_tasks)} Co-Lab task(s). Scheduling them within the TEC Office Hours block:")
+    print(f"Found {len(colab_tasks)} Co-Lab task(s). Scheduling them back-to-back within TEC Office Hours.")
+    # Set initial current start to the event start
+    current_start_dt = datetime.datetime.fromisoformat(event_start).astimezone(LOCAL_TIMEZONE)
     for task in colab_tasks:
         task_id = task["id"]
         task_name = get_task_name(task.get("properties", {}))
-        update_date_time(task_id, task_name=task_name, start_time=start_time, end_time=end_time)
-        print(f"Scheduled '{task_name}' from {start_time} to {end_time}.")
+        # Determine task duration based on priority
+        task_priority = task.get("properties", {}).get("Priority", {}).get("status", {}).get("name", "Low")
+        duration = priority_to_time_block.get(task_priority, TASK_LENGTH_LOW)
+        new_end_dt = current_start_dt + datetime.timedelta(minutes=duration)
+        # Update task with new start and computed end time
+        update_date_time(task_id, task_name=task_name, start_time=current_start_dt.isoformat(), end_time=new_end_dt.isoformat())
+        print(f"Scheduled '{task_name}' (Priority: {task_priority}) from {current_start_dt.isoformat()} to {new_end_dt.isoformat()}.")
+        # Set the current start for the next task to the end of this task
+        current_start_dt = new_end_dt
 
 if __name__ == "__main__":
-    main()
+    schedule_colab_tasks()
