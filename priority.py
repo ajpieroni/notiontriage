@@ -4,6 +4,7 @@ import datetime
 import requests
 import logging
 import threading
+import tzlocal
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -17,7 +18,6 @@ NOTION_API_KEY = os.getenv("NOTION_API_KEY")
 DATABASE_ID = os.getenv("DATABASE_ID")
 
 if not NOTION_API_KEY or not DATABASE_ID:
-    logger.error("Missing NOTION_API_KEY or DATABASE_ID environment variables.")
     exit(1)
 
 # Set up headers for the Notion API
@@ -34,7 +34,6 @@ def get_task_name(properties):
     try:
         return properties.get("Name", {}).get("title", [{}])[0].get("text", {}).get("content", "Unnamed Task")
     except Exception as e:
-        logger.error(f"Error retrieving task name: {e}")
         return "Unnamed Task"
 
 def prompt_due_date(task_name):
@@ -71,7 +70,6 @@ def fetch_academic_tasks_due_from_today():
     Only tasks that have a "Class" property set to "Academics" are returned.
     """
     today = datetime.datetime.now().date().isoformat()
-    logger.info(f"Fetching academic tasks due on or after: {today}")
     url = f"https://api.notion.com/v1/databases/{DATABASE_ID}/query"
     filter_payload = {
         "filter": {
@@ -96,15 +94,12 @@ def fetch_academic_tasks_due_from_today():
             payload["start_cursor"] = next_cursor
         response = requests.post(url, headers=headers, json=payload)
         if response.status_code != 200:
-            logger.error(f"Error fetching tasks: {response.status_code} - {response.text}")
             break
         data = response.json()
         tasks = data.get("results", [])
-        logger.debug(f"Fetched {len(tasks)} tasks in this batch.")
         all_tasks.extend(tasks)
         has_more = data.get("has_more", False)
         next_cursor = data.get("next_cursor")
-    logger.info(f"Total academic tasks fetched: {len(all_tasks)}")
     return all_tasks
 
 def print_tasks_actually_due(tasks):
@@ -129,20 +124,16 @@ def get_due_date(task):
     """
     properties = task.get("properties")
     if not properties:
-        logger.error("Task is missing properties.")
         return None
     task_name = get_task_name(properties)
     actually_due_prop = properties.get("Actually Due")
     if not actually_due_prop:
-        logger.info(f"'Actually Due' property is missing for task '{task_name}'.")
         return None
     date_info = actually_due_prop.get("date") if isinstance(actually_due_prop, dict) else None
     if not date_info:
-        logger.info(f"'Actually Due' date info is missing for task '{task_name}'.")
         return None
     start_date_str = date_info.get("start")
     if not start_date_str or start_date_str == "No date":
-        logger.info(f"'Actually Due' start date is empty for task '{task_name}'.")
         return None
     try:
         dt = datetime.datetime.fromisoformat(start_date_str)
@@ -150,37 +141,45 @@ def get_due_date(task):
             dt = dt.replace(tzinfo=datetime.timezone.utc)
         return dt
     except Exception as e:
-        logger.error(f"Error parsing start date for task '{task_name}': {e}")
         return None
 
-def update_task_priority(task_id, new_priority):
+def update_task_priority_and_due(task_id, new_priority, due_date):
     """
-    Update the 'Priority' property of a task.
+    Update the 'Priority' property and the 'Actually Due' date of a task.
+    The due_date is assumed to be in local time. We combine it with midnight in the local timezone,
+    then convert it to UTC before sending it to Notion.
     """
-    logger.info(f"Updating task {task_id} to priority '{new_priority}'")
+    local_tz = tzlocal.get_localzone()
+    dt_local = datetime.datetime.combine(due_date, datetime.time(0, 0), tzinfo=local_tz)
+    dt_utc = dt_local.astimezone(datetime.timezone.utc)
     url = f"https://api.notion.com/v1/pages/{task_id}"
     payload = {
         "properties": {
-            "Priority": {
-                "status": {"name": new_priority}
+            "Priority": {"status": {"name": new_priority}},
+            "Actually Due": {
+                "date": {
+                    "start": dt_utc.isoformat()
+                }
             }
         }
     }
     response = requests.patch(url, headers=headers, json=payload)
     if response.status_code == 200:
-        logger.info(f"Task {task_id} updated successfully.")
+        logger.info(f"Task {task_id} updated successfully with due date {dt_utc.isoformat()}.")
     else:
         logger.error(f"Failed to update task {task_id}: {response.status_code} - {response.text}")
 
 def update_task_with_due_date(task, due_date):
     """
-    Combine the given due_date with time and update the task's priority.
-    Optionally, you could also update the task's "Actually Due" field here.
+    Update the task's priority and post the user-entered due date (converted from local to UTC)
+    to Notion.
     """
-    dt = datetime.datetime.combine(due_date, datetime.time(0, 0), tzinfo=datetime.timezone.utc)
-    update_task_priority(task["id"], "Must Be Done Today")
+    update_task_priority_and_due(task["id"], "Must Be Done Today", due_date)
     task_name = get_task_name(task.get("properties", {}))
-    print(f"Task '{task_name}' (ID: {task['id']}) updated to 'Must Be Done Today' with due date {dt.isoformat()}.")
+    local_tz = tzlocal.get_localzone()
+    dt_local = datetime.datetime.combine(due_date, datetime.time(0, 0), tzinfo=local_tz)
+    dt_utc = dt_local.astimezone(datetime.timezone.utc)
+    print(f"Task '{task_name}' (ID: {task['id']}) updated to 'Must Be Done Today' with due date {dt_utc.isoformat()}.")
 
 def prompt_due_dates_for_tasks(tasks):
     """
@@ -238,7 +237,7 @@ def process_tasks():
     
     for task, due_date in tasks_with_due:
         if now <= due_date < three_days_later:
-            update_task_priority(task["id"], "Must Be Done Today")
+            update_task_priority_and_due(task["id"], "Must Be Done Today", due_date)
             task_name = get_task_name(task.get("properties", {}))
             print(f"Task '{task_name}' (ID: {task['id']}) updated to 'Must Be Done Today'")
     
