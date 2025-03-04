@@ -10,8 +10,8 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-# Configure logging to show DEBUG messages for detailed output
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+# Configure logging to show only INFO and above messages
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 NOTION_API_KEY = os.getenv("NOTION_API_KEY")
@@ -94,6 +94,7 @@ def fetch_academic_tasks_due_from_today():
             payload["start_cursor"] = next_cursor
         response = requests.post(url, headers=headers, json=payload)
         if response.status_code != 200:
+            logger.error(f"Error fetching tasks: {response.status_code} - {response.text}")
             break
         data = response.json()
         tasks = data.get("results", [])
@@ -106,16 +107,17 @@ def print_tasks_actually_due(tasks):
     """
     Print out the task name and 'Actually Due' date for each task.
     """
-    print("Academic tasks with their 'Actually Due' dates:")
-    for task in tasks:
-        properties = task.get("properties", {})
-        task_name = get_task_name(properties)
-        actually_due_prop = properties.get("Actually Due")
-        if actually_due_prop and actually_due_prop.get("date"):
-            actually_due = actually_due_prop.get("date", {}).get("start", "No date")
-        else:
-            actually_due = "No date"
-        print(f"- {task_name}: {actually_due}")
+    print("Tasks were fetched successfully. I'll prompt you if any due dates are missing.")
+    # print("Academic tasks with their 'Actually Due' dates:")
+    # for task in tasks:
+    #     properties = task.get("properties", {})
+    #     task_name = get_task_name(properties)
+    #     actually_due_prop = properties.get("Actually Due")
+    #     if actually_due_prop and actually_due_prop.get("date"):
+    #         actually_due = actually_due_prop.get("date", {}).get("start", "No date")
+    #     else:
+    #         actually_due = "No date"
+    #     print(f"- {task_name}: {actually_due}")
 
 def get_due_date(task):
     """
@@ -146,8 +148,8 @@ def get_due_date(task):
 def update_task_priority_and_due(task_id, new_priority, due_date):
     """
     Update the 'Priority' property and the 'Actually Due' date of a task.
-    The due_date is assumed to be in local time. We combine it with midnight in the local timezone,
-    then convert it to UTC before sending it to Notion.
+    The due_date is assumed to be in local time. It is combined with midnight in the local timezone,
+    then converted to UTC before sending it to Notion.
     """
     local_tz = tzlocal.get_localzone()
     dt_local = datetime.datetime.combine(due_date, datetime.time(0, 0), tzinfo=local_tz)
@@ -216,7 +218,8 @@ def double_check_academic_due_dates():
 def process_tasks():
     """
     Fetch academic tasks due today and after.
-    For tasks that already have a due date within the next 3 days, update their priority.
+    For tasks that already have a due date within the next 3 days, update their priority
+    to 'Must Be Done Today' only if not already set.
     For tasks missing a due date, prompt the user one at a time while updating in the background.
     Finally, double-check that no academic tasks remain with a missing due date.
     """
@@ -236,7 +239,8 @@ def process_tasks():
             tasks_missing_due.append(task)
     
     for task, due_date in tasks_with_due:
-        if now <= due_date < three_days_later:
+        current_priority = task.get("properties", {}).get("Priority", {}).get("status", {}).get("name", "")
+        if current_priority != "Must Be Done Today" and now <= due_date < three_days_later:
             update_task_priority_and_due(task["id"], "Must Be Done Today", due_date)
             task_name = get_task_name(task.get("properties", {}))
             print(f"Task '{task_name}' (ID: {task['id']}) updated to 'Must Be Done Today'")
