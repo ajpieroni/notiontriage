@@ -277,7 +277,7 @@ def schedule_tasks_for_mapping(event_name, task_class):
     matching_events = get_events_by_name(events, event_name)
 
     if not matching_events:
-        logger.warning(f"No events found for '{event_name}'. Skipping.")
+        logger.warning(f"No future events found for '{event_name}'. Skipping.")
         return
 
     tasks = fetch_unscheduled_tasks_for_class(task_class)
@@ -286,7 +286,7 @@ def schedule_tasks_for_mapping(event_name, task_class):
         return
 
     unscheduled_tasks = tasks[:]
-    print(f"DEBUG: Attempting to schedule {len(unscheduled_tasks)} tasks for '{task_class}'")
+    now = datetime.datetime.now().astimezone(LOCAL_TIMEZONE)  # Get current time
 
     while unscheduled_tasks:
         scheduling_happened = False
@@ -300,6 +300,17 @@ def schedule_tasks_for_mapping(event_name, task_class):
 
             current_start_dt = datetime.datetime.fromisoformat(event_start).astimezone(LOCAL_TIMEZONE)
             event_end_dt = datetime.datetime.fromisoformat(event_end).astimezone(LOCAL_TIMEZONE)
+
+            # Ensure the event is not in the past
+            print(f"now: {now}, event_end_dt: {event_end_dt}")
+            
+            if event_end_dt <= now:
+                logger.warning(f"Skipping past event: {event_name} (ended at {event_end_dt})")
+                continue  # Ignore past events
+
+            # If event starts in the past but extends into the future, use `now`
+            if current_start_dt < now:
+                current_start_dt = now
 
             while unscheduled_tasks and (current_start_dt + datetime.timedelta(minutes=TASK_LENGTH_MEDIUM) <= event_end_dt):
                 task = unscheduled_tasks.pop(0)
@@ -318,7 +329,6 @@ def schedule_tasks_for_mapping(event_name, task_class):
         if not scheduling_happened:
             logger.warning(f"Could not schedule {len(unscheduled_tasks)} remaining tasks.")
             break
-
 def main():
     # First schedule the tasks that match daily_tasks in 'Wake Up and Morning Routine'
     schedule_daily_tasks_in_event()
