@@ -7,3 +7,7 @@ requests==2.32.3
 urllib3==2.2.3
 tzlocal==5.0.1
 prompt_toolkit==3.0.38
+google-auth
+google-auth-httplib2
+google-api-python-client
+google-auth-oauthlib
