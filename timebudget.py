@@ -51,6 +51,20 @@ priority_to_time_block = {
     "Must Be Done Today": TASK_LENGTH_MUST_BE_DONE_TODAY,
 }
 
+CLASS_EMOJI_MAPPING = {
+    "Academics": "📚",
+    "Kyros": "🤖",
+    "TEC Office Hours": "💻",
+    "Gym": "🏋️",
+    "Music Practice": "🎵",
+    "Meetings": "📅",
+    "Admin": "☕",
+}
+
+def get_class_emoji(task_class):
+    """Retrieve the corresponding emoji for a given class, or use a default one."""
+    return CLASS_EMOJI_MAPPING.get(task_class, "🔹")  # Default emoji if class not found
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 logger = logging.getLogger()
 
@@ -241,7 +255,7 @@ calendar_task_mapping = {
     "TEC Office Hours": "Co-Lab",
 }
 
-def update_date_time(task_id, task_name, start_time, end_time,):
+def update_date_time(task_id, task_name, start_time, end_time, class_emoji):
     url = f"https://api.notion.com/v1/pages/{task_id}"
     payload = {
         "properties": {
@@ -252,10 +266,12 @@ def update_date_time(task_id, task_name, start_time, end_time,):
     if response.status_code != 200:
         logger.error(f"Failed to update Task '{task_name}'. Status: {response.status_code}, {response.text}")
     else:
-        print(f"✅ Task '{task_name}' scheduled from {start_time} to {end_time}.")
+        print(f"{class_emoji} Task '{task_name}' scheduled from {start_time} to {end_time}.")
 
 def schedule_tasks_for_mapping(event_name, task_class):
-    print(f"\nProcessing mapping: '{event_name}' -> '{task_class}'")
+    class_emoji = get_class_emoji(task_class)
+    print(f"\nProcessing mapping: '{class_emoji} {event_name}' -> '{task_class}'")
+    
     events = fetch_calendar_events()
     matching_events = get_events_by_name(events, event_name)
 
@@ -291,7 +307,7 @@ def schedule_tasks_for_mapping(event_name, task_class):
                 duration = priority_to_time_block.get("Medium", TASK_LENGTH_MEDIUM)
                 new_end_dt = current_start_dt + datetime.timedelta(minutes=duration)
 
-                update_date_time(task_id, task_name, current_start_dt.isoformat(), new_end_dt.isoformat())
+                update_date_time(task_id, task_name, current_start_dt.isoformat(), new_end_dt.isoformat(), class_emoji)
                 current_start_dt = new_end_dt
                 scheduling_happened = True
 
