@@ -175,6 +175,8 @@ calendar_task_mapping = {
     "TEC Office Hours": "Co-Lab",
 }
 def update_date_time(task_id, task_name, start_time, end_time):
+    print(f"DEBUG: Updating task '{task_name}' from {start_time} to {end_time}")
+    
     url = f"https://api.notion.com/v1/pages/{task_id}"
     payload = {
         "properties": {
@@ -202,10 +204,11 @@ def schedule_tasks_for_mapping(event_name, task_class):
         logger.warning(f"No unscheduled tasks found for '{task_class}'. Skipping.")
         return
 
-    unscheduled_tasks = tasks[:]  # Copy the list to track remaining tasks
+    unscheduled_tasks = tasks[:]  # Copy the list to track remaining task
+    print(f"DEBUG: Attempting to schedule {len(unscheduled_tasks)} tasks for '{task_class}'")
+    
     while unscheduled_tasks:
         new_unscheduled_tasks = []  # To track tasks that still don't fit
-
         for event in matching_events:
             event_start = event.get("start", {}).get("dateTime", event.get("start", {}).get("date"))
             event_end = event.get("end", {}).get("dateTime", event.get("end", {}).get("date"))
@@ -228,7 +231,7 @@ def schedule_tasks_for_mapping(event_name, task_class):
 
                 update_date_time(task_id, task_name, current_start_dt.isoformat(), new_end_dt.isoformat())
 
-                print(f"✅ Task '{task_name}' scheduled from {current_start_dt} to {new_end_dt}.")
+                # print(f"✅ Task '{task_name}' scheduled from {current_start_dt} to {new_end_dt}.")
                 
                 # Move to the next time block
                 current_start_dt = new_end_dt
