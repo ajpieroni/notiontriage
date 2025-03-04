@@ -157,7 +157,7 @@ def schedule_daily_tasks_in_event():
                 duration = priority_to_time_block.get("Medium", TASK_LENGTH_MEDIUM)
                 new_end_dt = current_start_dt + datetime.timedelta(minutes=duration)
 
-                update_date_time(task_id, task_name, current_start_dt.isoformat(), new_end_dt.isoformat())
+                update_date_time(task_id, task_name, current_start_dt.isoformat(), new_end_dt.isoformat(), class_emoji="☕️")
                 current_start_dt = new_end_dt
                 scheduling_happened = True
 
