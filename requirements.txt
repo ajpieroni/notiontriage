@@ -10,3 +10,4 @@ prompt_toolkit==3.0.38
 google-auth
 google-auth-httplib2
 google-api-python-client
+google-auth-oauthlib

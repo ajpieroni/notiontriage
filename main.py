@@ -209,7 +209,7 @@ def fetch_unassigned_tasks():
             {"property": "Status", "status": {"does_not_equal": "Deprecated"}},
             {"property": "Status", "status": {"does_not_equal": "Waiting on Reply"}},
             {"property": "Status", "status": {"does_not_equal": "Waiting on other task"}},
-            {"property": "Done", "checkbox": {"equals": False}}
+            {"property": "Done", "checkbox": {"equals": False}},
         ]
     }
     sorts_payload = [{"timestamp": "created_time", "direction": "ascending"}]
@@ -270,14 +270,17 @@ def update_date_only(task_id, task_name=None, date_str=None):
 def update_date_time(task_id, task_name=None, start_time=None, end_time=None, priority=None, status=None):
     url = f"https://api.notion.com/v1/pages/{task_id}"
     payload = {"properties": {}}
+
     if start_time:
         start_dt = datetime.datetime.fromisoformat(start_time)
         start_dt_local = start_dt.astimezone(LOCAL_TIMEZONE)
         start_time = start_dt_local.isoformat()
+
     if end_time:
         end_dt = datetime.datetime.fromisoformat(end_time)
         end_dt_local = end_dt.astimezone(LOCAL_TIMEZONE)
         end_time = end_dt_local.isoformat()
+
     if start_time or end_time:
         date_payload = {}
         if start_time:
@@ -285,10 +288,12 @@ def update_date_time(task_id, task_name=None, start_time=None, end_time=None, pr
         if end_time:
             date_payload["end"] = end_time
         payload["properties"]["Due"] = {"date": date_payload}
+
     if priority:
         payload["properties"]["Priority"] = {"status": {"name": priority}}
     if status:
         payload["properties"]["Status"] = {"status": {"name": status}}
+
     response = requests.patch(url, headers=headers, json=payload)
     if response.status_code != 200:
         logger.error(f"Failed to update Task: '{task_name}'. Status: {response.status_code}, {response.text}")
@@ -404,12 +409,20 @@ def get_tec_office_hours_event(events):
     return None
 
 def update_colab_tasks_due(office_hours_event):
-    """For any task with Class 'Co-Lab', update its due date/time to match the office hours event."""
+    """For any task with Class 'Co-Lab', update its due date/time to match the TEC Office Hours event."""
     if not office_hours_event:
         return
-    start_time = office_hours_event["start"].get("dateTime", office_hours_event["start"].get("date"))
-    end_time = office_hours_event["end"].get("dateTime", office_hours_event["end"].get("date"))
-    # Fetch all tasks and filter those with Class 'Co-Lab'
+    # Add error checking to ensure start/end exist
+    start_obj = office_hours_event.get("start")
+    end_obj = office_hours_event.get("end")
+    if not start_obj or not end_obj:
+        logger.error("TEC Office Hours event is missing a start or end time.")
+        return
+    start_time = start_obj.get("dateTime", start_obj.get("date"))
+    end_time = end_obj.get("dateTime", end_obj.get("date"))
+    if not start_time or not end_time:
+        logger.error("TEC Office Hours event does not contain valid start/end values.")
+        return
     all_tasks = fetch_all_tasks_sorted_by_created(assigned_time_equals=False)
     for task in all_tasks:
         class_value = task.get("properties", {}).get("Class", {}).get("select", {}).get("name")
@@ -418,6 +431,72 @@ def update_colab_tasks_due(office_hours_event):
             task_name = get_task_name(task.get("properties", {}))
             update_date_time(task_id, task_name=task_name, start_time=start_time, end_time=end_time)
             print(f"Updated '{task_name}' to TEC Office Hours block: {start_time} - {end_time}")
+
+def get_academics_events(events):
+    """Return a list of events that contain 'academics' in their summary (case-insensitive)."""
+    academics = []
+    for event in events:
+        summary = event.get("summary", "")
+        if "academics" in summary.lower():
+            academics.append(event)
+    return academics
+
+def update_academics_tasks_due(academics_events):
+    """For any task with Class 'Academics', update its due date/time in a round-robin fashion from academics events."""
+    if not academics_events:
+        return
+    sorted_events = sorted(
+        academics_events,
+        key=lambda event: event["start"].get("dateTime", event["start"].get("date"))
+    )
+    all_tasks = fetch_all_tasks_sorted_by_created(assigned_time_equals=False)
+    academics_tasks = [
+        task for task in all_tasks
+        if task.get("properties", {}).get("Class", {}).get("select", {}).get("name") == "Academics"
+    ]
+    if not academics_tasks:
+        return
+    for i, task in enumerate(academics_tasks):
+        event = sorted_events[i % len(sorted_events)]
+        start_time = event["start"].get("dateTime", event["start"].get("date"))
+        end_time = event["end"].get("dateTime", event["end"].get("date"))
+        task_id = task["id"]
+        task_name = get_task_name(task.get("properties", {}))
+        update_date_time(task_id, task_name=task_name, start_time=start_time, end_time=end_time)
+        print(f"Updated '{task_name}' to Academics block: {start_time} - {end_time}")
+
+def get_kyros_events(events):
+    """Return a list of events that contain 'kyros' in their summary (case-insensitive)."""
+    kyros_events = []
+    for event in events:
+        summary = event.get("summary", "")
+        if "kyros" in summary.lower():
+            kyros_events.append(event)
+    return kyros_events
+
+def update_kyros_tasks_due(kyros_events):
+    """For any task with Class 'Kyros', update its due date/time in a round-robin fashion from kyros events."""
+    if not kyros_events:
+        return
+    sorted_events = sorted(
+        kyros_events,
+        key=lambda event: event["start"].get("dateTime", event["start"].get("date"))
+    )
+    all_tasks = fetch_all_tasks_sorted_by_created(assigned_time_equals=False)
+    kyros_tasks = [
+        task for task in all_tasks
+        if task.get("properties", {}).get("Class", {}).get("select", {}).get("name") == "Kyros"
+    ]
+    if not kyros_tasks:
+        return
+    for i, task in enumerate(kyros_tasks):
+        event = sorted_events[i % len(sorted_events)]
+        start_time = event["start"].get("dateTime", event["start"].get("date"))
+        end_time = event["end"].get("dateTime", event["end"].get("date"))
+        task_id = task["id"]
+        task_name = get_task_name(task.get("properties", {}))
+        update_date_time(task_id, task_name=task_name, start_time=start_time, end_time=end_time)
+        print(f"Updated '{task_name}' to Kyros block: {start_time} - {end_time}")
 
 # --------------------------- OVERLAP & FREE BLOCKS ---------------------------
 def check_for_overlap(current_schedule, proposed_start, proposed_end):
@@ -598,6 +677,8 @@ def schedule_single_task(task, current_time, test_mode, current_schedule, schedu
     current_time_local = current_time.astimezone(LOCAL_TIMEZONE)
     start_time_local = current_time_local
     end_time_local = start_time_local + datetime.timedelta(minutes=time_block_minutes)
+    
+    # Ensure "Not started [later]" tasks are scheduled after 6 PM
     if status == "Not started [later]":
         start_time_local = current_time.astimezone(LOCAL_TIMEZONE)
         if start_time_local.hour < 18:
@@ -686,9 +767,9 @@ def schedule_single_task(task, current_time, test_mode, current_schedule, schedu
         parsed_time = None
         for fmt in ["%I%p", "%I:%M%p", "%H:%M"]:
             try:
-                today = start_time_local.date()
+                today_date = start_time_local.date()
                 new_time = datetime.datetime.strptime(user_input, fmt).time()
-                new_start_local = LOCAL_TIMEZONE.localize(datetime.datetime.combine(today, new_time))
+                new_start_local = LOCAL_TIMEZONE.localize(datetime.datetime.combine(today_date, new_time))
                 parsed_time = new_start_local
                 break
             except ValueError:
@@ -828,7 +909,6 @@ def assign_dues_and_blocks(test_mode=False):
     Main entry point to fetch tasks, triage, create 'Schedule Day' task, update tasks based on calendar events,
     and schedule everything with date/time blocks.
     """
-    # Prompt for scheduling day
     schedule_day_input = input("When do you want to schedule for? (today, tomorrow): ").strip().lower()
     if schedule_day_input == "tomorrow":
         schedule_tomorrow()
@@ -836,19 +916,34 @@ def assign_dues_and_blocks(test_mode=False):
         return
     elif schedule_day_input != "today":
         print("Unrecognized choice. Defaulting to scheduling for today.")
-    # --- New: Fetch calendar events and update Co-Lab tasks based on TEC Office Hours ---
+
+    # --- Fetch calendar events and update tasks based on event blocks ---
     try:
         cal_events = fetch_calendar_events()  # Defaults to today
+        # Update Co-Lab tasks with TEC Office Hours block
         office_hours = get_tec_office_hours_event(cal_events)
         if office_hours:
             print("TEC Office Hours event found; updating 'Co-Lab' tasks accordingly.")
             update_colab_tasks_due(office_hours)
         else:
             print("No TEC Office Hours event found for today.")
+        # Update Academics tasks in a round-robin fashion
+        academics_events = get_academics_events(cal_events)
+        if academics_events:
+            print("Academics events found; updating 'Academics' tasks accordingly.")
+            update_academics_tasks_due(academics_events)
+        else:
+            print("No Academics events found for today.")
+        # Update Kyros tasks in a round-robin fashion
+        kyros_events = get_kyros_events(cal_events)
+        if kyros_events:
+            print("Kyros events found; updating 'Kyros' tasks accordingly.")
+            update_kyros_tasks_due(kyros_events)
+        else:
+            print("No Kyros events found for today.")
     except Exception as e:
         print("Failed to fetch or update calendar events:", e)
     # -------------------------------------------------------------------------------
-    # Round to next half-hour
     local_now = datetime.datetime.now(LOCAL_TIMEZONE).replace(second=0, microsecond=0)
     if local_now.minute < 30:
         local_now = local_now.replace(minute=30)
@@ -863,7 +958,10 @@ def assign_dues_and_blocks(test_mode=False):
     current_schedule = fetch_current_schedule()
     show_schedule_overview(current_schedule)
     updated_tasks = fetch_all_tasks_sorted_by_created(assigned_time_equals=False)
-    non_deprecated_tasks = [t for t in updated_tasks if t.get("properties", {}).get("Status", {}).get("status", {}).get("name") != "Deprecated"]
+    non_deprecated_tasks = [
+        t for t in updated_tasks
+        if t.get("properties", {}).get("Status", {}).get("status", {}).get("name") != "Deprecated"
+    ]
     seen_ids = set()
     unique_tasks = []
     for t in non_deprecated_tasks:
@@ -909,7 +1007,12 @@ class TaskSchedulerTUI:
             if self.tasks:
                 self.handle_task_action(self.current_index)
         self.layout = self.create_layout()
-        self.app = Application(layout=Layout(self.layout), key_bindings=self.kb, full_screen=True, style=self.style())
+        self.app = Application(
+            layout=Layout(self.layout),
+            key_bindings=self.kb,
+            full_screen=True,
+            style=self.style()
+        )
     def load_tasks(self):
         self.tasks = fetch_unassigned_tasks()
     def style(self):
@@ -930,9 +1033,15 @@ class TaskSchedulerTUI:
             if not lines:
                 lines = [("class:task", "No unassigned tasks.")]
             return lines
-        task_list_window = Window(content=FormattedTextControl(get_formatted_tasks), wrap_lines=False)
+        task_list_window = Window(
+            content=FormattedTextControl(get_formatted_tasks),
+            wrap_lines=False
+        )
         body = HSplit([
-            Window(height=1, content=FormattedTextControl("Unassigned Tasks (Up/Down, Enter, Ctrl-Q to quit)")),
+            Window(
+                height=1,
+                content=FormattedTextControl("Unassigned Tasks (Up/Down, Enter, Ctrl-Q to quit)"),
+            ),
             task_list_window
         ])
         return body
