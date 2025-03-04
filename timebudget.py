@@ -241,7 +241,7 @@ calendar_task_mapping = {
     "TEC Office Hours": "Co-Lab",
 }
 
-def update_date_time(task_id, task_name, start_time, end_time):
+def update_date_time(task_id, task_name, start_time, end_time,):
     url = f"https://api.notion.com/v1/pages/{task_id}"
     payload = {
         "properties": {
