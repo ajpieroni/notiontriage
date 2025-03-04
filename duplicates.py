@@ -8,8 +8,8 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-# Configure logging to include debugging output
-logging.basicConfig(level=logging.DEBUG)
+# Configure logging to show only INFO level messages
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 NOTION_API_KEY = os.getenv("NOTION_API_KEY")
@@ -32,7 +32,6 @@ def get_task_name(properties):
     """
     try:
         name = properties.get("Name", {}).get("title", [{}])[0].get("text", {}).get("content", "Unnamed Task")
-        logger.debug(f"Retrieved task name: {name}")
         return name
     except Exception as e:
         logger.error(f"Error retrieving task name: {e}")
@@ -44,16 +43,14 @@ def fetch_tasks_due_today():
     and have a Due date equal to or after today, handling pagination.
     """
     today = datetime.datetime.now().date().isoformat()
-    logger.debug(f"Today's date: {today}")
+    logger.info(f"Fetching tasks for today: {today}")
     url = f"https://api.notion.com/v1/databases/{DATABASE_ID}/query"
     filter_payload = {
         "filter": {
             "and": [
                 {
                     "property": "Due",
-                    "date": {
-                        "on_or_after": today
-                    }
+                    "date": {"on_or_after": today}
                 },
                 {"property": "Status", "status": {"does_not_equal": "Done"}},
                 {"property": "Status", "status": {"does_not_equal": "Handed Off"}},
@@ -62,7 +59,6 @@ def fetch_tasks_due_today():
             ]
         }
     }
-    logger.debug(f"Initial filter payload: {filter_payload}")
     
     all_tasks = []
     has_more = True
@@ -72,16 +68,13 @@ def fetch_tasks_due_today():
         payload = filter_payload.copy()
         if next_cursor:
             payload["start_cursor"] = next_cursor
-        logger.debug(f"Request payload: {payload}")
         response = requests.post(url, headers=headers, json=payload)
-        logger.debug(f"Response status code: {response.status_code}")
         if response.status_code == 200:
             data = response.json()
             tasks = data.get("results", [])
             all_tasks.extend(tasks)
             has_more = data.get("has_more", False)
             next_cursor = data.get("next_cursor", None)
-            logger.debug(f"Fetched {len(tasks)} tasks; Total so far: {len(all_tasks)}; has_more: {has_more}")
         else:
             logger.error(f"Failed to fetch tasks: {response.status_code} {response.text}")
             break
@@ -94,51 +87,39 @@ def update_task_status(task_id, new_status):
     Update the Status property of a task.
     """
     url = f"https://api.notion.com/v1/pages/{task_id}"
-    payload = {
-        "properties": {
-            "Status": {
-                "status": {"name": new_status}
-            }
-        }
-    }
-    logger.debug(f"Updating task {task_id} with payload: {payload}")
+    payload = {"properties": {"Status": {"status": {"name": new_status}}}}
     response = requests.patch(url, headers=headers, json=payload)
-    logger.debug(f"Response status code for update: {response.status_code}")
     if response.status_code == 200:
         logger.info(f"Task {task_id} updated to status '{new_status}'.")
     else:
         logger.error(f"Failed to update task {task_id}: {response.status_code} {response.text}")
 
-def mark_duplicate_tasks_as_deprecated(tasks, deprecated):
+def mark_duplicate_tasks_as_deprecated(tasks):
     """
     For tasks with the same name, mark every task (except the oldest) as Deprecated.
+    Returns a tuple (duplicate_count, duplicates_summary) where:
+      - duplicate_count is the total number of tasks marked as duplicates.
+      - duplicates_summary is a dict mapping task names to a list of deprecated task IDs.
     """
+    duplicate_count = 0
+    duplicates_summary = {}
     # Group tasks by their name.
     task_groups = {}
     for task in tasks:
         name = get_task_name(task.get("properties", {}))
         task_groups.setdefault(name, []).append(task)
-        logger.debug(f"Added task ID {task['id']} to group '{name}'.")
 
-    # For any group with duplicate names, mark the newer ones as deprecated.
     for name, group in task_groups.items():
-        logger.debug(f"Processing group '{name}' with {len(group)} tasks.")
         if len(group) > 1:
             # Sort tasks by created_time (oldest first)
             sorted_group = sorted(group, key=lambda t: t.get("created_time"))
-            logger.debug(f"Sorted group '{name}' by created_time.")
-            # Log created times for debugging purposes
-            for task in sorted_group:
-                logger.debug(f"Task ID {task['id']} created at {task.get('created_time')}")
-            # Mark all but the newest task as Deprecated
-            for task in sorted_group[:-1]:
-                task_id = task["id"]
-                logger.info(f"Marking task '{name}' (ID: {task_id}) as Deprecated.")
-                deprecated += 1
-                update_task_status(task_id, "Deprecated")
-        else:
-            logger.debug(f"No duplicates found for task '{name}'.")
-    return deprecated
+            # Mark all but the oldest task as Deprecated
+            duplicates = sorted_group[:-1]
+            duplicate_count += len(duplicates)
+            duplicates_summary[name] = [t["id"] for t in duplicates]
+            for task in duplicates:
+                update_task_status(task["id"], "Deprecated")
+    return duplicate_count, duplicates_summary
 
 def main():
     logger.info("Starting script to deprecate duplicate tasks.")
@@ -146,11 +127,18 @@ def main():
     if not tasks:
         logger.info("No incomplete tasks due today found.")
         return
-    deprecated = 0
-    deprecated = mark_duplicate_tasks_as_deprecated(tasks, deprecated)
+
+    duplicate_count, duplicates_summary = mark_duplicate_tasks_as_deprecated(tasks)
     logger.info("Finished processing tasks.")
-    # Print the number of tasks marked as deprecated
-    print("Number of tasks marked as deprecated:", deprecated)
+    
+    # Print summary of duplicate tasks
+    print("Total number of duplicated tasks marked as Deprecated:", duplicate_count)
+    if duplicates_summary:
+        print("Summary of duplicate tasks:")
+        for task_name, ids in duplicates_summary.items():
+            print(f" - {task_name}: {len(ids)} duplicates, IDs: {ids}")
+    else:
+        print("No duplicate tasks were found.")
 
 if __name__ == "__main__":
     main()
