@@ -49,7 +49,7 @@ def prompt_due_date(task_name):
     if input_str.lower() in weekdays:
         today = datetime.datetime.now().date()
         target_day = weekdays.index(input_str.lower())
-        today_weekday = today.weekday()  # Monday=0
+        today_weekday = today.weekday()  # Monday = 0
         days_ahead = (target_day - today_weekday) % 7
         if days_ahead == 0:
             days_ahead = 7
@@ -76,10 +76,7 @@ def fetch_academic_tasks_due_from_today():
     filter_payload = {
         "filter": {
             "and": [
-                {
-                    "property": "Class",
-                    "select": {"equals": "Academics"}
-                },
+                {"property": "Class", "select": {"equals": "Academics"}},
                 {"property": "Priority", "status": {"does_not_equal": "Someday"}},
                 {"property": "Status", "status": {"does_not_equal": "Done"}},
                 {"property": "Status", "status": {"does_not_equal": "Handed Off"}},
@@ -128,7 +125,7 @@ def print_tasks_actually_due(tasks):
 def get_due_date(task):
     """
     Extract the start due date from a task's "Actually Due" property.
-    If the due date is missing or empty, return None so that we can batch-prompt later.
+    If the due date is missing or empty, return None so that we can prompt later.
     """
     properties = task.get("properties")
     if not properties:
@@ -178,49 +175,55 @@ def update_task_priority(task_id, new_priority):
 def update_task_with_due_date(task, due_date):
     """
     Combine the given due_date with time and update the task's priority.
+    Optionally, you could also update the task's "Actually Due" field here.
     """
     dt = datetime.datetime.combine(due_date, datetime.time(0, 0), tzinfo=datetime.timezone.utc)
-    # Optionally, update the task's "Actually Due" field via a separate PATCH call here.
     update_task_priority(task["id"], "Must Be Done Today")
     task_name = get_task_name(task.get("properties", {}))
     print(f"Task '{task_name}' (ID: {task['id']}) updated to 'Must Be Done Today' with due date {dt.isoformat()}.")
 
-def prompt_due_dates_for_tasks(tasks, batch_size=3):
+def prompt_due_dates_for_tasks(tasks):
     """
-    Process tasks that need due date input in batches.
-    For each batch, display the task names and prompt the user for due dates.
-    As soon as the user inputs a due date, update that task in a background thread.
+    For each task missing a due date, prompt the user one at a time.
+    As soon as a due date is entered, update the task in a background thread
+    so that the prompt for the next task appears immediately.
     """
-    from math import ceil
-    total = len(tasks)
-    num_batches = ceil(total / batch_size)
-    for i in range(num_batches):
-        batch = tasks[i * batch_size:(i + 1) * batch_size]
-        print("\nPlease provide due dates for the following tasks:")
-        for idx, task in enumerate(batch, start=1):
+    for task in tasks:
+        task_name = get_task_name(task.get("properties", {}))
+        due_date = None
+        while due_date is None:
+            due_date = prompt_due_date(task_name)
+        t = threading.Thread(target=update_task_with_due_date, args=(task, due_date))
+        t.start()
+
+def double_check_academic_due_dates():
+    """
+    Re-fetch academic tasks and check if any tasks with class Academics
+    are missing a due date in the "Actually Due" field.
+    """
+    tasks = fetch_academic_tasks_due_from_today()
+    missing_due = []
+    for task in tasks:
+        if get_due_date(task) is None:
             task_name = get_task_name(task.get("properties", {}))
-            print(f"{idx}. {task_name}")
-        # For each task in the batch, prompt for input and spawn a thread for updating
-        for task in batch:
-            task_name = get_task_name(task.get("properties", {}))
-            due_date = None
-            while due_date is None:
-                due_date = prompt_due_date(task_name)
-            # Spawn a thread to update the task while allowing next prompts
-            t = threading.Thread(target=update_task_with_due_date, args=(task, due_date))
-            t.start()
+            missing_due.append(task_name)
+    if missing_due:
+        print("\nWARNING: The following academic tasks are still missing 'Actually Due' dates:")
+        for name in missing_due:
+            print(f"- {name}")
+    else:
+        print("\nAll academic tasks have a valid 'Actually Due' date.")
 
 def process_tasks():
     """
     Fetch academic tasks due today and after.
     For tasks that already have a due date within the next 3 days, update their priority.
-    For tasks missing a due date, group them in batches (e.g., 2-3) and prompt the user for input,
-    updating the tasks in the background.
+    For tasks missing a due date, prompt the user one at a time while updating in the background.
+    Finally, double-check that no academic tasks remain with a missing due date.
     """
     tasks = fetch_academic_tasks_due_from_today()
     print_tasks_actually_due(tasks)
     
-    # Split tasks into two groups: those with due dates and those missing them.
     tasks_with_due = []
     tasks_missing_due = []
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -233,16 +236,17 @@ def process_tasks():
         else:
             tasks_missing_due.append(task)
     
-    # Update tasks that already have due dates
     for task, due_date in tasks_with_due:
         if now <= due_date < three_days_later:
             update_task_priority(task["id"], "Must Be Done Today")
             task_name = get_task_name(task.get("properties", {}))
             print(f"Task '{task_name}' (ID: {task['id']}) updated to 'Must Be Done Today'")
     
-    # Process tasks missing due dates in batches
     if tasks_missing_due:
-        prompt_due_dates_for_tasks(tasks_missing_due, batch_size=3)
+        prompt_due_dates_for_tasks(tasks_missing_due)
+    
+    # Final double-check: re-fetch and verify no academic tasks are missing a due date.
+    double_check_academic_due_dates()
     
     print("🎉 All done!")
 
