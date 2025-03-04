@@ -80,3 +80,7 @@ Using cached protobuf-5.29.3-cp38-abi3-macosx_10_9_universal2.whl (417 kB)
 Using cached pyasn1-0.6.1-py3-none-any.whl (83 kB)
 Using cached pyparsing-3.2.1-py3-none-any.whl (107 kB)
 Installing collected packages: wcwidth, pytz, urllib3, uritemplate, tzlocal, python-dotenv, pyparsing, pyasn1, protobuf, prompt_toolkit, oauthlib, idna, charset-normalizer, certifi, cachetools, rsa, requests, pyasn1-modules, proto-plus, httplib2, googleapis-common-protos, requests-oauthlib, google-auth, google-auth-oauthlib, google-auth-httplib2, google-api-core, google-api-python-client
+Successfully installed cachetools-5.5.2 certifi-2024.12.14 charset-normalizer-3.4.0 google-api-core-2.24.1 google-api-python-client-2.162.0 google-auth-2.38.0 google-auth-httplib2-0.2.0 google-auth-oauthlib-1.2.1 googleapis-common-protos-1.69.0 httplib2-0.22.0 idna-3.10 oauthlib-3.2.2 prompt_toolkit-3.0.38 proto-plus-1.26.0 protobuf-5.29.3 pyasn1-0.6.1 pyasn1-modules-0.4.1 pyparsing-3.2.1 python-dotenv-1.0.1 pytz-2024.2 requests-2.32.3 requests-oauthlib-2.0.0 rsa-4.9 tzlocal-5.0.1 uritemplate-4.1.1 urllib3-2.2.3 wcwidth-0.2.13
+
+[notice] A new release of pip is available: 24.2 -> 25.0.1
+[notice] To update, run: pip install --upgrade pip
