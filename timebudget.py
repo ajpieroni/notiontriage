@@ -37,13 +37,13 @@ load_dotenv()
 NOTION_API_KEY = os.getenv("NOTION_API_KEY")
 DATABASE_ID = os.getenv("DATABASE_ID")
 
-# Read task length values from env (defaults provided)
+# Read task length values from environment (in minutes, with defaults)
 TASK_LENGTH_LOW = int(os.getenv("TASK_LENGTH_LOW", 30))
 TASK_LENGTH_MEDIUM = int(os.getenv("TASK_LENGTH_MEDIUM", 60))
 TASK_LENGTH_HIGH = int(os.getenv("TASK_LENGTH_HIGH", 90))
 TASK_LENGTH_MUST_BE_DONE_TODAY = int(os.getenv("TASK_LENGTH_MUST_BE_DONE_TODAY", 90))
 
-# Map priority to task length (in minutes)
+# Map priority names to task length
 priority_to_time_block = {
     "Low": TASK_LENGTH_LOW,
     "Medium": TASK_LENGTH_MEDIUM,
@@ -85,18 +85,27 @@ def fetch_tasks(filter_payload, sorts_payload):
         payload["start_cursor"] = data.get("next_cursor")
     return all_tasks
 
-def fetch_colab_tasks():
-    """Fetch tasks due within today with Class 'Co-Lab'."""
+def fetch_unscheduled_tasks_for_class(task_class):
+    """
+    Fetch tasks due today with the given class and that don't already have an end time.
+    """
     today = datetime.datetime.now().date().isoformat()
     filter_payload = {
         "and": [
             {"property": "Due", "date": {"equals": today}},
-            {"property": "Class", "select": {"equals": "Co-Lab"}},
+            {"property": "Class", "select": {"equals": task_class}},
             {"property": "Done", "checkbox": {"equals": False}},
         ]
     }
     sorts_payload = [{"timestamp": "created_time", "direction": "ascending"}]
-    return fetch_tasks(filter_payload, sorts_payload)
+    tasks = fetch_tasks(filter_payload, sorts_payload)
+    unscheduled = []
+    for task in tasks:
+        due = task.get("properties", {}).get("Due", {}).get("date", {})
+        # Only include if "end" is not set (i.e. unscheduled)
+        if not due.get("end"):
+            unscheduled.append(task)
+    return unscheduled
 
 def update_date_time(task_id, task_name=None, start_time=None, end_time=None, priority=None, status=None):
     url = f"https://api.notion.com/v1/pages/{task_id}"
@@ -165,53 +174,57 @@ def fetch_calendar_events(chosen_date=None):
         logger.error(f"An error occurred: {error}")
     return events
 
-def get_tec_office_hours_event(events):
-    """Return the first event with 'TEC Office Hours' in its summary."""
+def get_event_by_name(events, event_name):
+    """Return the first event whose summary contains the event_name (case-insensitive)."""
     for event in events:
         summary = event.get("summary", "")
-        if "TEC Office Hours" in summary:
+        if event_name.lower() in summary.lower():
             return event
     return None
 
-# --------------------------- TASK SCHEDULING FOR COLAB ---------------------------
-def schedule_colab_tasks():
-    """
-    Fetch all Co-Lab tasks due today and schedule them back-to-back within the TEC Office Hours block.
-    Each task's length is determined by its priority (using environment-defined values).
-    """
-    # Fetch today's TEC Office Hours event
-    cal_events = fetch_calendar_events()
-    tec_event = get_tec_office_hours_event(cal_events)
-    if not tec_event:
-        logger.error("No TEC Office Hours event found for today. Aborting scheduling.")
+# --------------------------- CALENDAR TO TASK MAPPING ---------------------------
+# Define the mappings: Calendar Event Name -> Task Class
+calendar_task_mapping = {
+    "TEC Office Hours": "Co-Lab",
+    "Academics": "Academics",
+    "Kyros": "Kyros"
+}
+
+def schedule_tasks_for_mapping(event_name, task_class):
+    """Schedule unscheduled tasks for the given task_class within the event block identified by event_name."""
+    print(f"\nProcessing mapping: '{event_name}' -> '{task_class}'")
+    events = fetch_calendar_events()
+    event = get_event_by_name(events, event_name)
+    if not event:
+        logger.error(f"No event found for '{event_name}'. Skipping tasks with class '{task_class}'.")
         return
-    start_obj = tec_event.get("start", {})
+    start_obj = event.get("start", {})
     event_start = start_obj.get("dateTime", start_obj.get("date"))
     if not event_start:
-        logger.error("TEC Office Hours event is missing a valid start time. Aborting scheduling.")
+        logger.error(f"Event '{event_name}' is missing a valid start time. Skipping tasks with class '{task_class}'.")
         return
-
-    # Fetch Co-Lab tasks due today
-    colab_tasks = fetch_colab_tasks()
-    if not colab_tasks:
-        print("No Co-Lab tasks due today found.")
+    # Fetch unscheduled tasks for the specified class
+    tasks = fetch_unscheduled_tasks_for_class(task_class)
+    if not tasks:
+        print(f"No unscheduled tasks with class '{task_class}' found for today.")
         return
-
-    print(f"Found {len(colab_tasks)} Co-Lab task(s). Scheduling them back-to-back within TEC Office Hours.")
-    # Set initial current start to the event start
+    print(f"Found {len(tasks)} unscheduled '{task_class}' task(s).")
+    # Set initial current start to event start
     current_start_dt = datetime.datetime.fromisoformat(event_start).astimezone(LOCAL_TIMEZONE)
-    for task in colab_tasks:
+    for task in tasks:
         task_id = task["id"]
         task_name = get_task_name(task.get("properties", {}))
-        # Determine task duration based on priority
         task_priority = task.get("properties", {}).get("Priority", {}).get("status", {}).get("name", "Low")
         duration = priority_to_time_block.get(task_priority, TASK_LENGTH_LOW)
         new_end_dt = current_start_dt + datetime.timedelta(minutes=duration)
-        # Update task with new start and computed end time
         update_date_time(task_id, task_name=task_name, start_time=current_start_dt.isoformat(), end_time=new_end_dt.isoformat())
         print(f"Scheduled '{task_name}' (Priority: {task_priority}) from {current_start_dt.isoformat()} to {new_end_dt.isoformat()}.")
-        # Set the current start for the next task to the end of this task
-        current_start_dt = new_end_dt
+        current_start_dt = new_end_dt  # Update current start for next task
+
+def main():
+    # Loop through all mappings and schedule tasks accordingly
+    for event_name, task_class in calendar_task_mapping.items():
+        schedule_tasks_for_mapping(event_name, task_class)
 
 if __name__ == "__main__":
-    schedule_colab_tasks()
+    main()
