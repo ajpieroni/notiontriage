@@ -27,7 +27,7 @@ load_dotenv()
 NOTION_API_KEY = os.getenv("NOTION_API_KEY")
 DATABASE_ID = os.getenv("DATABASE_ID")
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(threadName)s - %(message)s")
 logger = logging.getLogger()
 
 priority_to_time_block = {
@@ -125,7 +125,6 @@ def parse_custom_date(input_str):
             return None
     return None
 
-
 # --------------------------- API CALLS ---------------------------
 def fetch_tasks(filter_payload, sorts_payload):
     url = f"https://api.notion.com/v1/databases/{DATABASE_ID}/query"
@@ -199,7 +198,6 @@ def fetch_unassigned_tasks():
     sorts_payload = [{"timestamp": "created_time", "direction": "ascending"}]
     return fetch_tasks(filter_payload, sorts_payload)
 
-
 # --------------------------- CREATE 'SCHEDULE DAY' TASK ---------------------------
 def create_schedule_day_task():
     today = datetime.datetime.now(LOCAL_TIMEZONE).date().isoformat()
@@ -238,7 +236,6 @@ def create_schedule_day_task():
         logger.info("'Schedule Day' task created successfully.")
     else:
         logger.error(f"Failed to create 'Schedule Day' task. Status: {create_resp.status_code}, {create_resp.text}")
-
 
 # --------------------------- UPDATE FUNCTIONS ---------------------------
 def update_date_only(task_id, task_name=None, date_str=None):
@@ -280,6 +277,7 @@ def update_date_time(task_id, task_name=None, start_time=None, end_time=None, pr
         logger.error(f"Failed to update Task: '{task_name}'. Status: {response.status_code}, {response.text}")
 
 def triage_unassigned_tasks():
+    logger.info(f"Triage started in thread: {threading.current_thread().name}")
     priority_mapping = {
         "1": "Low",
         "2": "Medium",
@@ -473,7 +471,8 @@ def schedule_tomorrow():
     tomorrow_start_utc = tomorrow_start_local.astimezone(datetime.timezone.utc)
     tasks_post_triage = fetch_all_tasks_sorted_by_created(assigned_time_equals=False, target_date=tomorrow_str)
     non_deprecated_tasks = [
-        t for t in tasks_post_triage if t.get("properties", {}).get("Status", {}).get("status", {}).get("name") != "Deprecated"
+        t for t in tasks_post_triage
+        if t.get("properties", {}).get("Status", {}).get("status", {}).get("name") != "Deprecated"
     ]
     seen_ids = set()
     unique_tasks = []
@@ -516,12 +515,13 @@ def schedule_single_task(task, current_time, test_mode, current_schedule, schedu
     status = props.get("Status", {}).get("status", {}).get("name", "Not started")
     time_block_minutes = priority_to_time_block.get(priority, 30)
     
-    # If AUTO_SCHEDULE is enabled (when option 3 is selected), force accept all and restart settings.
+    # Force auto-accept and restart settings if AUTO_SCHEDULE is enabled.
     global AUTO_SCHEDULE
     if AUTO_SCHEDULE:
         accept_all_mode = True
         ignore_availability_mode = True
 
+    logger.info(f"Scheduling task '{task_name}' (Priority: {priority}) in thread: {threading.current_thread().name}")
     current_time_local = current_time.astimezone(LOCAL_TIMEZONE)
     start_time_local = current_time_local
     end_time_local = start_time_local + datetime.timedelta(minutes=time_block_minutes)
@@ -536,7 +536,7 @@ def schedule_single_task(task, current_time, test_mode, current_schedule, schedu
             end_time_local = start_time_local + datetime.timedelta(minutes=30)
     else:
         end_time_local = current_time + datetime.timedelta(minutes=30)
-
+    
     if (start_time_local.hour >= 23) and (not allow_late_night_scheduling) and (not ignore_availability_mode):
         print(f"🚨 We have reached {start_time_local.strftime('%I:%M %p')} which is after 11 PM.")
         print("Options:")
@@ -556,7 +556,7 @@ def schedule_single_task(task, current_time, test_mode, current_schedule, schedu
             return None, allow_late_night_scheduling, ignore_availability_mode, accept_all_mode
         elif response == 'R':
             ignore_availability_mode = True
-            print("Okay, from now on we'll keep scheduling from 9 AM ignoring availability.")
+            print("Restarting scheduling from 9 AM (ignoring availability).")
         else:
             schedule_complete()
             return None, allow_late_night_scheduling, ignore_availability_mode, accept_all_mode
@@ -575,14 +575,14 @@ def schedule_single_task(task, current_time, test_mode, current_schedule, schedu
             end_time_local = start_time_local + datetime.timedelta(minutes=time_block_minutes)
         if overlap_count > 0:
             print(f"Adjusted schedule {overlap_count} times to find a free slot.")
-
+    
     start_time_disp = start_time_local.strftime("%Y-%m-%d %I:%M %p %Z")
     end_time_disp = end_time_local.strftime("%Y-%m-%d %I:%M %p %Z")
-
+    
     if task_name in scheduled_task_names:
         print(f"🚨 Task '{task_name}' already scheduled. Skipping.")
         return current_time, allow_late_night_scheduling, ignore_availability_mode, accept_all_mode
-
+    
     if accept_all_mode:
         if not test_mode:
             start_iso = start_time_local.isoformat()
@@ -595,7 +595,7 @@ def schedule_single_task(task, current_time, test_mode, current_schedule, schedu
                 current_schedule.append(task)
         return end_time_local.astimezone(datetime.timezone.utc), allow_late_night_scheduling, ignore_availability_mode, accept_all_mode
 
-    # In normal (non-auto) mode, the interactive prompt would run.
+    # (In normal mode, an interactive prompt would appear here—but AUTO_SCHEDULE forces auto-accept.)
     print(f"\n{'='*50}")
     print(f"Task: '{task_name}' (Priority: {priority})")
     print(f"Proposed Start: {start_time_disp}, End: {end_time_disp} ({time_block_minutes} mins)")
@@ -603,6 +603,7 @@ def schedule_single_task(task, current_time, test_mode, current_schedule, schedu
     print("Or type a time like '9pm' to override, or type 'ACCEPT ALL' to apply all remaining automatically:")
     print(f"{'='*50}")
     scheduled_task_names.add(task_name)
+    # (This branch should not be reached in AUTO_SCHEDULE mode.)
     while True:
         user_input = input("Your choice: ").strip().upper()
         if user_input == "ACCEPT ALL":
@@ -635,7 +636,7 @@ def schedule_single_task(task, current_time, test_mode, current_schedule, schedu
                 start_time_local_9 = wrap_to_9am_if_needed(start_time_local, start_time_local.date())
                 if start_time_local_9 != start_time_local:
                     start_time_local = start_time_local_9
-                    end_time_local = start_time_local_9 + datetime.timedelta(minutes=time_block_minutes)
+                    end_time_local = start_time_local + datetime.timedelta(minutes=time_block_minutes)
             else:
                 overlap_count = 0
                 while check_for_overlap(current_schedule, start_time_local, end_time_local):
@@ -665,11 +666,9 @@ def schedule_single_task(task, current_time, test_mode, current_schedule, schedu
         print(f"Task renamed to '{new_name}'.")
         task_name = new_name
         task["properties"]["Name"]["title"][0]["text"]["content"] = new_name
-        return schedule_single_task(
-            task, current_time, test_mode, current_schedule, scheduled_task_names,
-            accept_all_mode=accept_all_mode, allow_late_night_scheduling=allow_late_night_scheduling,
-            ignore_availability_mode=ignore_availability_mode
-        )
+        return schedule_single_task(task, current_time, test_mode, current_schedule, scheduled_task_names,
+                                    accept_all_mode=accept_all_mode, allow_late_night_scheduling=allow_late_night_scheduling,
+                                    ignore_availability_mode=ignore_availability_mode)
     elif user_input == "S":
         print(f"Task '{task_name}' deferred to tomorrow.")
         tomorrow_str = (start_time_local.date() + datetime.timedelta(days=1)).isoformat()
@@ -744,10 +743,7 @@ def schedule_tasks_in_pattern(tasks, test_mode=False, starting_time=None, schedu
 
 # --------------------------- MAIN ENTRY POINT FOR SCHEDULING ---------------------------
 def assign_dues_and_blocks(test_mode=False):
-    """
-    Main entry point to fetch tasks, triage, create 'Schedule Day' task, and schedule
-    everything with date/time blocks.
-    """
+    logger.info(f"Scheduling started in thread: {threading.current_thread().name}")
     schedule_day_input = input("When do you want to schedule for? (today, tomorrow): ").strip().lower()
     if schedule_day_input == "tomorrow":
         schedule_tomorrow()
@@ -874,11 +870,13 @@ if __name__ == "__main__":
     elif user_choice == "2":
         assign_dues_and_blocks(test_mode=False)
     elif user_choice == "3":
-        # Set AUTO_SCHEDULE to true so scheduling auto-accepts and always restarts from 9AM.
+        # When option 3 is selected, enable AUTO_SCHEDULE so scheduling auto-accepts and always restarts from 9 AM.
         AUTO_SCHEDULE = True
-        # Run scheduling concurrently with triaging.
+        logger.info("AUTO_SCHEDULE enabled. Starting scheduling and triage concurrently.")
+        # Run scheduling concurrently in a separate thread.
         sched_thread = threading.Thread(target=assign_dues_and_blocks, args=(False,), daemon=True)
         sched_thread.start()
+        # Meanwhile, run triage in the main thread.
         triage_unassigned_tasks()
         sched_thread.join()
     else:
