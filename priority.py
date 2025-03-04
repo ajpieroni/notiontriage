@@ -107,16 +107,17 @@ def print_tasks_actually_due(tasks):
     """
     Print out the task name and 'Actually Due' date for each task.
     """
-    print("Academic tasks with their 'Actually Due' dates:")
-    for task in tasks:
-        properties = task.get("properties", {})
-        task_name = get_task_name(properties)
-        actually_due_prop = properties.get("Actually Due")
-        if actually_due_prop and actually_due_prop.get("date"):
-            actually_due = actually_due_prop.get("date", {}).get("start", "No date")
-        else:
-            actually_due = "No date"
-        print(f"- {task_name}: {actually_due}")
+    print("Tasks were fetched successfully. I'll prompt you if any due dates are missing.")
+    # print("Academic tasks with their 'Actually Due' dates:")
+    # for task in tasks:
+    #     properties = task.get("properties", {})
+    #     task_name = get_task_name(properties)
+    #     actually_due_prop = properties.get("Actually Due")
+    #     if actually_due_prop and actually_due_prop.get("date"):
+    #         actually_due = actually_due_prop.get("date", {}).get("start", "No date")
+    #     else:
+    #         actually_due = "No date"
+    #     print(f"- {task_name}: {actually_due}")
 
 def get_due_date(task):
     """
@@ -217,7 +218,8 @@ def double_check_academic_due_dates():
 def process_tasks():
     """
     Fetch academic tasks due today and after.
-    For tasks that already have a due date within the next 3 days, update their priority.
+    For tasks that already have a due date within the next 3 days, update their priority
+    to 'Must Be Done Today' only if not already set.
     For tasks missing a due date, prompt the user one at a time while updating in the background.
     Finally, double-check that no academic tasks remain with a missing due date.
     """
@@ -237,7 +239,8 @@ def process_tasks():
             tasks_missing_due.append(task)
     
     for task, due_date in tasks_with_due:
-        if now <= due_date < three_days_later:
+        current_priority = task.get("properties", {}).get("Priority", {}).get("status", {}).get("name", "")
+        if current_priority != "Must Be Done Today" and now <= due_date < three_days_later:
             update_task_priority_and_due(task["id"], "Must Be Done Today", due_date)
             task_name = get_task_name(task.get("properties", {}))
             print(f"Task '{task_name}' (ID: {task['id']}) updated to 'Must Be Done Today'")
