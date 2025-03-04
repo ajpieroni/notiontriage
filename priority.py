@@ -10,8 +10,8 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-# Configure logging to show DEBUG messages for detailed output
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+# Configure logging to show only INFO and above messages
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 NOTION_API_KEY = os.getenv("NOTION_API_KEY")
@@ -94,6 +94,7 @@ def fetch_academic_tasks_due_from_today():
             payload["start_cursor"] = next_cursor
         response = requests.post(url, headers=headers, json=payload)
         if response.status_code != 200:
+            logger.error(f"Error fetching tasks: {response.status_code} - {response.text}")
             break
         data = response.json()
         tasks = data.get("results", [])
@@ -146,8 +147,8 @@ def get_due_date(task):
 def update_task_priority_and_due(task_id, new_priority, due_date):
     """
     Update the 'Priority' property and the 'Actually Due' date of a task.
-    The due_date is assumed to be in local time. We combine it with midnight in the local timezone,
-    then convert it to UTC before sending it to Notion.
+    The due_date is assumed to be in local time. It is combined with midnight in the local timezone,
+    then converted to UTC before sending it to Notion.
     """
     local_tz = tzlocal.get_localzone()
     dt_local = datetime.datetime.combine(due_date, datetime.time(0, 0), tzinfo=local_tz)
