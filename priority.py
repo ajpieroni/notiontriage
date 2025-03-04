@@ -84,17 +84,21 @@ def fetch_academic_tasks_due_from_today():
         next_cursor = data.get("next_cursor")
     logger.info(f"Total academic tasks fetched: {len(all_tasks)}")
     return all_tasks
-
 def print_tasks_actually_due(tasks):
     """
     Print out the task name and 'Actually Due' date for each task.
     """
     print("Academic tasks with their 'Actually Due' dates:")
     for task in tasks:
-        task_name = get_task_name(task.get("properties", {}))
-        actually_due = task.get("properties", {}).get("Actually Due", {}).get("date", {}).get("start", "No date")
+        properties = task.get("properties", {})
+        task_name = get_task_name(properties)
+        # Safely get the "Actually Due" date if it exists
+        actually_due_prop = properties.get("Actually Due")
+        if actually_due_prop and actually_due_prop.get("date"):
+            actually_due = actually_due_prop.get("date", {}).get("start", "No date")
+        else:
+            actually_due = "No date"
         print(f"- {task_name}: {actually_due}")
-
 def get_due_date(task):
     """
     Extract the start due date from a task's "Actually Due" property.
