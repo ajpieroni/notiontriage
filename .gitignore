@@ -10,3 +10,4 @@ __pycache__/
 *.log.DS_Store
 token.json
 credentials.json
+.token 2.json
