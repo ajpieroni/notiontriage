@@ -11,3 +11,4 @@ __pycache__/
 token.json
 credentials.json
 .token 2.json
+.DS_Store

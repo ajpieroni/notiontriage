@@ -651,13 +651,18 @@ def schedule_single_task(task, current_time, test_mode, current_schedule, schedu
             end_time_local = start_time_local + datetime.timedelta(minutes=30)
     else:
         end_time_local = current_time + datetime.timedelta(minutes=30)
-
     if (start_time_local.hour >= 23) and (not allow_late_night_scheduling) and (not ignore_availability_mode):
-        print(f"🚨 We have reached {start_time_local.strftime('%I:%M %p')} which is after 11 PM. Deferring task '{task_name}' to tomorrow.")
-        tomorrow_str = (start_time_local.date() + datetime.timedelta(days=1)).isoformat()
-        update_date_only(task_id, task_name=task_name, date_str=tomorrow_str)
-        return None, allow_late_night_scheduling, ignore_availability_mode, True
-
+        # Reset to 9:00 AM on the same day
+        day_9am = start_time_local.replace(hour=9, minute=0, second=0, microsecond=0)
+        
+        # If you want to ensure we don't schedule in the past, compare against "now" 
+        # and pick the later of the two. However, if you truly want 
+        # to keep everything on the same day no matter what, you can skip this check.
+        now_local = datetime.datetime.now(LOCAL_TIMEZONE)
+        start_time_local = max(day_9am, now_local)
+        
+        end_time_local = start_time_local + datetime.timedelta(minutes=time_block_minutes)
+        print(f"🚨 We have reached 11 PM. Looping back to 9 AM the same day for '{task_name}'.")
     if ignore_availability_mode:
         target_date = start_time_local.astimezone(LOCAL_TIMEZONE).date()
         start_time_local_9 = wrap_to_9am_if_needed(start_time_local, target_date)

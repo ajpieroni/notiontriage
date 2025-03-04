@@ -89,6 +89,71 @@ daily_tasks = set([
     "Drink and Owala"
 ])
 
+def schedule_daily_tasks_in_event():
+    """Schedules any tasks that match daily_tasks into the 'Wake Up and Morning Routine' event."""
+    # 1. Fetch all tasks due today and not done
+    today_iso = datetime.datetime.now().date().isoformat()
+    filter_payload = {
+        "and": [
+            {"property": "Due", "date": {"equals": today_iso}},
+            {"property": "Done", "checkbox": {"equals": False}}
+        ]
+    }
+    tasks_today = fetch_tasks(filter_payload, [])
+
+    # 2. Filter for tasks whose names are in daily_tasks
+    unscheduled_daily_tasks = []
+    for t in tasks_today:
+        task_name = get_task_name(t["properties"])
+        if task_name in daily_tasks:
+            unscheduled_daily_tasks.append(t)
+
+    if not unscheduled_daily_tasks:
+        logger.info("No daily tasks found to schedule.")
+        return
+
+    # 3. Fetch the 'Wake Up and Morning Routine' event
+    events = fetch_calendar_events()
+    matching_events = get_events_by_name(events, "Wake Up and Morning Routine")
+
+    if not matching_events:
+        logger.warning("No 'Wake Up and Morning Routine' event found. Skipping daily tasks scheduling.")
+        return
+
+    # 4. Schedule tasks in a round-robin style in the matching event(s)
+    while unscheduled_daily_tasks:
+        scheduling_happened = False
+
+        for event in matching_events:
+            event_start_str = event.get("start", {}).get("dateTime", event.get("start", {}).get("date"))
+            event_end_str = event.get("end", {}).get("dateTime", event.get("end", {}).get("date"))
+
+            if not event_start_str or not event_end_str:
+                logger.warning(f"Event missing start/end time. Skipping: {event.get('summary')}")
+                continue
+
+            current_start_dt = datetime.datetime.fromisoformat(event_start_str).astimezone(LOCAL_TIMEZONE)
+            event_end_dt = datetime.datetime.fromisoformat(event_end_str).astimezone(LOCAL_TIMEZONE)
+
+            while unscheduled_daily_tasks and (current_start_dt + datetime.timedelta(minutes=TASK_LENGTH_MEDIUM) <= event_end_dt):
+                task = unscheduled_daily_tasks.pop(0)
+                task_name = get_task_name(task["properties"])
+                task_id = task["id"]
+
+                duration = priority_to_time_block.get("Medium", TASK_LENGTH_MEDIUM)
+                new_end_dt = current_start_dt + datetime.timedelta(minutes=duration)
+
+                update_date_time(task_id, task_name, current_start_dt.isoformat(), new_end_dt.isoformat())
+                current_start_dt = new_end_dt
+                scheduling_happened = True
+
+            if not unscheduled_daily_tasks:
+                break
+
+        if not scheduling_happened:
+            logger.warning(f"Could not schedule {len(unscheduled_daily_tasks)} remaining daily tasks.")
+            break
+
 # --------------------------- UTILS ---------------------------
 def get_task_name(properties):
     try:
@@ -174,9 +239,8 @@ calendar_task_mapping = {
     "Kyros": "Kyros",
     "TEC Office Hours": "Co-Lab",
 }
+
 def update_date_time(task_id, task_name, start_time, end_time):
-    # print(f"DEBUG: Updating task '{task_name}' from {start_time} to {end_time}")
-    
     url = f"https://api.notion.com/v1/pages/{task_id}"
     payload = {
         "properties": {
@@ -187,13 +251,10 @@ def update_date_time(task_id, task_name, start_time, end_time):
     if response.status_code != 200:
         logger.error(f"Failed to update Task '{task_name}'. Status: {response.status_code}, {response.text}")
     else:
-        # modify emoji based on class of task
-        
         print(f"✅ Task '{task_name}' scheduled from {start_time} to {end_time}.")
-    
+
 def schedule_tasks_for_mapping(event_name, task_class):
     print(f"\nProcessing mapping: '{event_name}' -> '{task_class}'")
-
     events = fetch_calendar_events()
     matching_events = get_events_by_name(events, event_name)
 
@@ -206,13 +267,11 @@ def schedule_tasks_for_mapping(event_name, task_class):
         logger.warning(f"No unscheduled tasks found for '{task_class}'. Skipping.")
         return
 
-    unscheduled_tasks = tasks[:]  # Copy list of tasks
+    unscheduled_tasks = tasks[:]
     print(f"DEBUG: Attempting to schedule {len(unscheduled_tasks)} tasks for '{task_class}'")
 
-    # Loop until no tasks are left or no scheduling occurs during a full pass
     while unscheduled_tasks:
-        scheduling_happened = False  # Track if any scheduling occurred this pass
-
+        scheduling_happened = False
         for event in matching_events:
             event_start = event.get("start", {}).get("dateTime", event.get("start", {}).get("date"))
             event_end = event.get("end", {}).get("dateTime", event.get("end", {}).get("date"))
@@ -224,31 +283,31 @@ def schedule_tasks_for_mapping(event_name, task_class):
             current_start_dt = datetime.datetime.fromisoformat(event_start).astimezone(LOCAL_TIMEZONE)
             event_end_dt = datetime.datetime.fromisoformat(event_end).astimezone(LOCAL_TIMEZONE)
 
-            # Schedule tasks into the current event as long as there's space
             while unscheduled_tasks and (current_start_dt + datetime.timedelta(minutes=TASK_LENGTH_MEDIUM) <= event_end_dt):
-                task = unscheduled_tasks.pop(0)  # Remove the first task
+                task = unscheduled_tasks.pop(0)
                 task_name = get_task_name(task["properties"])
                 task_id = task["id"]
                 duration = priority_to_time_block.get("Medium", TASK_LENGTH_MEDIUM)
                 new_end_dt = current_start_dt + datetime.timedelta(minutes=duration)
 
                 update_date_time(task_id, task_name, current_start_dt.isoformat(), new_end_dt.isoformat())
-
-                # Advance to the next time block in this event
                 current_start_dt = new_end_dt
-                scheduling_happened = True  # A task was scheduled
+                scheduling_happened = True
 
-            # If tasks are exhausted, break early
             if not unscheduled_tasks:
                 break
 
-        # If no tasks were scheduled in this full pass, break to avoid an infinite loop
         if not scheduling_happened:
             logger.warning(f"Could not schedule {len(unscheduled_tasks)} remaining tasks.")
-            break  
+            break
+
 def main():
+    # First schedule the tasks that match daily_tasks in 'Wake Up and Morning Routine'
+    schedule_daily_tasks_in_event()
+
+    # Then schedule other tasks based on class/event mappings
     for event_name, task_class in calendar_task_mapping.items():
-        schedule_tasks_for_mapping(event_name, task_class)  # Ensure it runs for all mappings
+        schedule_tasks_for_mapping(event_name, task_class)
 
 if __name__ == "__main__":
     main()
