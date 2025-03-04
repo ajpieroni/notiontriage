@@ -62,37 +62,37 @@ headers = {
 }
 
 # --------------------------- UTILS & HELPERS ---------------------------
-daily_tasks = [
-    "Play back in chess",
-    "Drink an Owala",
-    "Write 5 Sentences for Blog",
-    "Italian Anki",
-    "Call someone you don't call often (@Yap Directory)",
-    "Shave",
-    "Brush Teeth",
-    "Shower",
-    "Morning Routine",
-    "Budget Reset",
-    "Kyros HW Check",
-    "Book Office Room",
-    "Clean Slate",
-    "Reconcile",
-    "Duolingo",
-    "Shower",
-    "Clean Room",
-    "Shave",
-    "Clean out Backpack",
-    "Weekly Reset",
-    "Pay Off Credit Cards",
-    "Play back in chess",
-    "Meal Plan",
-    "Block out lunch & dinners for the week",
-    "Call someone you don't call often (",
-    "NYT Mini",
-    "Forest Prune",
-    "Schedule Day",
-    "Drink and Owala"
-]
+# daily_tasks = [
+#     "Play back in chess",
+#     "Drink an Owala",
+#     "Write 5 Sentences for Blog",
+#     "Italian Anki",
+#     "Call someone you don't call often (@Yap Directory)",
+#     "Shave",
+#     "Brush Teeth",
+#     "Shower",
+#     "Morning Routine",
+#     "Budget Reset",
+#     "Kyros HW Check",
+#     "Book Office Room",
+#     "Clean Slate",
+#     "Reconcile",
+#     "Duolingo",
+#     "Shower",
+#     "Clean Room",
+#     "Shave",
+#     "Clean out Backpack",
+#     "Weekly Reset",
+#     "Pay Off Credit Cards",
+#     "Play back in chess",
+#     "Meal Plan",
+#     "Block out lunch & dinners for the week",
+#     "Call someone you don't call often (",
+#     "NYT Mini",
+#     "Forest Prune",
+#     "Schedule Day",
+#     "Drink and Owala"
+# ]
 
 def get_task_name(properties):
     try:
@@ -299,15 +299,15 @@ def triage_unassigned_tasks():
             print(f"🔁 Task '{task_name}' has already been triaged. Marking as Deprecated.")
             update_date_time(task_id, task_name=task_name, status="Deprecated")
             return
-        if task_name in daily_tasks:
-            update_date_time(task_id, task_name=task_name, priority="Low")
-            now = datetime.datetime.now(LOCAL_TIMEZONE)
-            seven_thirty = datetime.datetime.combine(now.date(), datetime.time(7, 30), tzinfo=LOCAL_TIMEZONE)
-            due_time = now if now < seven_thirty else seven_thirty
-            due_time_iso = due_time.isoformat()
-            update_date_time(task_id, task_name=task_name, start_time=due_time_iso, end_time=due_time_iso)
-            print(f"📌 '{task_name}' recognized as a daily task. Set to Low priority and due at {due_time_iso}.")
-            continue
+        # if task_name in daily_tasks:
+        #     update_date_time(task_id, task_name=task_name, priority="Low")
+        #     now = datetime.datetime.now(LOCAL_TIMEZONE)
+        #     seven_thirty = datetime.datetime.combine(now.date(), datetime.time(7, 30), tzinfo=LOCAL_TIMEZONE)
+        #     due_time = now if now < seven_thirty else seven_thirty
+        #     due_time_iso = due_time.isoformat()
+        #     update_date_time(task_id, task_name=task_name, start_time=due_time_iso, end_time=due_time_iso)
+        #     print(f"📌 '{task_name}' recognized as a daily task. Set to Low priority and due at {due_time_iso}.")
+        #     continue
         print(f"\n📝 Task: '{task_name}' is 'Unassigned'.")
         # (Since ACCEPT ALL is always true, we automatically set the task's priority and due date.)
         chosen_priority = "Low"  # Default assignment; adjust as needed

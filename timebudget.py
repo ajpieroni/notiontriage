@@ -187,6 +187,8 @@ def update_date_time(task_id, task_name, start_time, end_time):
     if response.status_code != 200:
         logger.error(f"Failed to update Task '{task_name}'. Status: {response.status_code}, {response.text}")
     else:
+        # modify emoji based on class of task
+        
         print(f"✅ Task '{task_name}' scheduled from {start_time} to {end_time}.")
         
 def schedule_tasks_for_mapping(event_name, task_class):
