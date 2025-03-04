@@ -26,6 +26,16 @@ headers = {
     "Notion-Version": "2022-06-28",
 }
 
+def get_task_name(properties):
+    """
+    Retrieve the task name from the task properties.
+    """
+    try:
+        return properties.get("Name", {}).get("title", [{}])[0].get("text", {}).get("content", "Unnamed Task")
+    except Exception as e:
+        logger.error(f"Error retrieving task name: {e}")
+        return "Unnamed Task"
+
 def fetch_tasks_due_from_today():
     """
     Fetch all tasks with a Due date on or after today, handling pagination.
@@ -35,7 +45,7 @@ def fetch_tasks_due_from_today():
     url = f"https://api.notion.com/v1/databases/{DATABASE_ID}/query"
     filter_payload = {
         "filter": {
-            "property": "Due",
+            "property": "Actually Due",
             "date": {
                 "on_or_after": today
             }
@@ -103,12 +113,11 @@ def process_tasks():
     """
     Fetch tasks due today and after.
     For each task with a due date within the next 3 days,
-    update its priority to 'Must Be Done Today' and summarize the changes.
+    update its priority to 'Must Be Done Today' and print a summary.
     """
     tasks = fetch_tasks_due_from_today()
     count_updated = 0
-    updated_task_ids = []
-    # Use offset-aware UTC time
+    updated_tasks = []  # list of tuples: (task_id, task_name)
     now = datetime.datetime.now(datetime.timezone.utc)
     three_days_later = now + datetime.timedelta(days=3)
 
@@ -116,15 +125,17 @@ def process_tasks():
         due_date = get_due_date(task)
         if due_date and now <= due_date < three_days_later:
             task_id = task["id"]
-            updated_task_ids.append(task_id)
+            task_name = get_task_name(task.get("properties", {}))
             update_task_priority(task_id, "Must Be Done Today")
+            print(f"Task '{task_name}' (ID: {task_id}) updated to 'Must Be Done Today'")
+            updated_tasks.append((task_id, task_name))
             count_updated += 1
 
     logger.info(f"Total tasks updated: {count_updated}")
-    if updated_task_ids:
-        print("\nTasks updated to 'Must Be Done Today':")
-        for tid in updated_task_ids:
-            print(f"- {tid}")
+    if updated_tasks:
+        print("\nSummary of tasks updated:")
+        for tid, tname in updated_tasks:
+            print(f"- {tname} (ID: {tid})")
     else:
         print("\nNo tasks due within the next 3 days to update.")
 
