@@ -41,55 +41,53 @@ def get_task_name(properties):
 def fetch_tasks_due_today():
     """
     Fetch all tasks from the Notion database that are incomplete (Done: false)
-    and have a Due date equal to today.
+    and have a Due date equal to or after today, handling pagination.
     """
     today = datetime.datetime.now().date().isoformat()
     logger.debug(f"Today's date: {today}")
     url = f"https://api.notion.com/v1/databases/{DATABASE_ID}/query"
     filter_payload = {
-    #     "sorts": [
-    #     {"timestamp": "created_time", "direction": "ascending"}
-    # ],
-
         "filter": {
             "and": [
-                # {
-                #     "property": "Due",
-                #     "date": {
-                #         "on_or_before": today
-                #     }
-                # },
                 {
                     "property": "Due",
                     "date": {
                         "on_or_after": today
                     }
                 },
-                # {
-                #     "property": "Status",
-                #     "checkbox": {
-                #         "does_not_equal": "Done"
-                #     }
-                # },
-            {"property": "Status", "status": {"does_not_equal": "Done"}},
-            {"property": "Status", "status": {"does_not_equal": "Handed Off"}},
-            {"property": "Status", "status": {"does_not_equal": "Deprecated"}},
-            {"property": "Done", "checkbox": {"equals": False}},
+                {"property": "Status", "status": {"does_not_equal": "Done"}},
+                {"property": "Status", "status": {"does_not_equal": "Handed Off"}},
+                {"property": "Status", "status": {"does_not_equal": "Deprecated"}},
+                {"property": "Done", "checkbox": {"equals": False}},
             ]
         }
     }
-    logger.debug(f"Filter payload: {filter_payload}")
-    response = requests.post(url, headers=headers, json=filter_payload)
-    logger.debug(f"Response status code: {response.status_code}")
-    if response.status_code == 200:
-        data = response.json()
-        logger.debug(f"Response JSON: {data}")
-        tasks = data.get("results", [])
-        logger.info(f"Fetched {len(tasks)} tasks due today.")
-        return tasks
-    else:
-        logger.error(f"Failed to fetch tasks: {response.status_code} {response.text}")
-        return []
+    logger.debug(f"Initial filter payload: {filter_payload}")
+    
+    all_tasks = []
+    has_more = True
+    next_cursor = None
+
+    while has_more:
+        payload = filter_payload.copy()
+        if next_cursor:
+            payload["start_cursor"] = next_cursor
+        logger.debug(f"Request payload: {payload}")
+        response = requests.post(url, headers=headers, json=payload)
+        logger.debug(f"Response status code: {response.status_code}")
+        if response.status_code == 200:
+            data = response.json()
+            tasks = data.get("results", [])
+            all_tasks.extend(tasks)
+            has_more = data.get("has_more", False)
+            next_cursor = data.get("next_cursor", None)
+            logger.debug(f"Fetched {len(tasks)} tasks; Total so far: {len(all_tasks)}; has_more: {has_more}")
+        else:
+            logger.error(f"Failed to fetch tasks: {response.status_code} {response.text}")
+            break
+
+    logger.info(f"Total fetched tasks: {len(all_tasks)}")
+    return all_tasks
 
 def update_task_status(task_id, new_status):
     """
@@ -132,15 +130,15 @@ def mark_duplicate_tasks_as_deprecated(tasks, deprecated):
             # Log created times for debugging purposes
             for task in sorted_group:
                 logger.debug(f"Task ID {task['id']} created at {task.get('created_time')}")
-            # Keep the newest task and mark the rest as Deprecated
-            
+            # Mark all but the newest task as Deprecated
             for task in sorted_group[:-1]:
                 task_id = task["id"]
                 logger.info(f"Marking task '{name}' (ID: {task_id}) as Deprecated.")
-                deprecated += 1;
+                deprecated += 1
                 update_task_status(task_id, "Deprecated")
         else:
             logger.debug(f"No duplicates found for task '{name}'.")
+    return deprecated
 
 def main():
     logger.info("Starting script to deprecate duplicate tasks.")
@@ -149,11 +147,10 @@ def main():
         logger.info("No incomplete tasks due today found.")
         return
     deprecated = 0
-    mark_duplicate_tasks_as_deprecated(tasks, deprecated)
+    deprecated = mark_duplicate_tasks_as_deprecated(tasks, deprecated)
     logger.info("Finished processing tasks.")
-    # print length of tasks marked as deprecated
-    print("Number of tasks marked as deprecated: ", deprecated)
-    
+    # Print the number of tasks marked as deprecated
+    print("Number of tasks marked as deprecated:", deprecated)
 
 if __name__ == "__main__":
     main()
