@@ -251,7 +251,7 @@ def process_tasks():
     # Final double-check: re-fetch and verify no academic tasks are missing a due date.
     double_check_academic_due_dates()
     
-    print("🎉 All done!")
+    # print("🎉 All done!")
 
 if __name__ == "__main__":
     process_tasks()
