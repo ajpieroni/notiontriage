@@ -175,7 +175,7 @@ calendar_task_mapping = {
     "TEC Office Hours": "Co-Lab",
 }
 def update_date_time(task_id, task_name, start_time, end_time):
-    print(f"DEBUG: Updating task '{task_name}' from {start_time} to {end_time}")
+    # print(f"DEBUG: Updating task '{task_name}' from {start_time} to {end_time}")
     
     url = f"https://api.notion.com/v1/pages/{task_id}"
     payload = {
@@ -190,7 +190,6 @@ def update_date_time(task_id, task_name, start_time, end_time):
         # modify emoji based on class of task
         
         print(f"✅ Task '{task_name}' scheduled from {start_time} to {end_time}.")
-    
     
 def schedule_tasks_for_mapping(event_name, task_class):
     print(f"\nProcessing mapping: '{event_name}' -> '{task_class}'")
@@ -210,38 +209,43 @@ def schedule_tasks_for_mapping(event_name, task_class):
     unscheduled_tasks = tasks[:]  # Copy list of tasks
     print(f"DEBUG: Attempting to schedule {len(unscheduled_tasks)} tasks for '{task_class}'")
 
-    # Process each event one by one
-    for event in matching_events:
-        event_start = event.get("start", {}).get("dateTime", event.get("start", {}).get("date"))
-        event_end = event.get("end", {}).get("dateTime", event.get("end", {}).get("date"))
+    # Loop until no tasks are left or no scheduling occurs during a full pass
+    while unscheduled_tasks:
+        scheduling_happened = False  # Track if any scheduling occurred this pass
 
-        if not event_start or not event_end:
-            logger.warning(f"Event '{event_name}' is missing start or end time. Skipping.")
-            continue
+        for event in matching_events:
+            event_start = event.get("start", {}).get("dateTime", event.get("start", {}).get("date"))
+            event_end = event.get("end", {}).get("dateTime", event.get("end", {}).get("date"))
 
-        current_start_dt = datetime.datetime.fromisoformat(event_start).astimezone(LOCAL_TIMEZONE)
-        event_end_dt = datetime.datetime.fromisoformat(event_end).astimezone(LOCAL_TIMEZONE)
+            if not event_start or not event_end:
+                logger.warning(f"Event '{event_name}' is missing start or end time. Skipping.")
+                continue
 
-        # Schedule tasks into the current event as long as there's space
-        while unscheduled_tasks and (current_start_dt + datetime.timedelta(minutes=TASK_LENGTH_MEDIUM) <= event_end_dt):
-            task = unscheduled_tasks.pop(0)  # Remove the first task
-            task_name = get_task_name(task["properties"])
-            task_id = task["id"]
-            duration = priority_to_time_block.get("Medium", TASK_LENGTH_MEDIUM)
-            new_end_dt = current_start_dt + datetime.timedelta(minutes=duration)
+            current_start_dt = datetime.datetime.fromisoformat(event_start).astimezone(LOCAL_TIMEZONE)
+            event_end_dt = datetime.datetime.fromisoformat(event_end).astimezone(LOCAL_TIMEZONE)
 
-            update_date_time(task_id, task_name, current_start_dt.isoformat(), new_end_dt.isoformat())
+            # Schedule tasks into the current event as long as there's space
+            while unscheduled_tasks and (current_start_dt + datetime.timedelta(minutes=TASK_LENGTH_MEDIUM) <= event_end_dt):
+                task = unscheduled_tasks.pop(0)  # Remove the first task
+                task_name = get_task_name(task["properties"])
+                task_id = task["id"]
+                duration = priority_to_time_block.get("Medium", TASK_LENGTH_MEDIUM)
+                new_end_dt = current_start_dt + datetime.timedelta(minutes=duration)
 
-            # Advance to the next time block in this event
-            current_start_dt = new_end_dt
+                update_date_time(task_id, task_name, current_start_dt.isoformat(), new_end_dt.isoformat())
 
-        # If all tasks have been scheduled, break out of the loop
-        if not unscheduled_tasks:
-            break
+                # Advance to the next time block in this event
+                current_start_dt = new_end_dt
+                scheduling_happened = True  # A task was scheduled
 
-    if unscheduled_tasks:
-        logger.warning(f"Could not schedule {len(unscheduled_tasks)} remaining tasks.")
-        
+            # If tasks are exhausted, break early
+            if not unscheduled_tasks:
+                break
+
+        # If no tasks were scheduled in this full pass, break to avoid an infinite loop
+        if not scheduling_happened:
+            logger.warning(f"Could not schedule {len(unscheduled_tasks)} remaining tasks.")
+            break  
 def main():
     for event_name, task_class in calendar_task_mapping.items():
         schedule_tasks_for_mapping(event_name, task_class)  # Ensure it runs for all mappings
