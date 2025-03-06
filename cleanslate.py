@@ -36,7 +36,8 @@ def fetch_incomplete_assigned_tasks():
             {"property": "Status", "status": {"does_not_equal": "Archived"}},
             {"property": "Status", "status": {"does_not_equal": "Cancelled"}},
             {"property": "Done", "checkbox": {"equals": False}},
-            {"property": "Due", "date": {"on_or_after": today_iso}}
+            {"property": "Due", "date": {"on_or_after": today_iso}},
+            # {"property": "Due", "date": {"on_or_before": today_iso}}
         ]
     }
 
@@ -73,8 +74,8 @@ def get_task_name(task):
 # Function to update the due date of tasks to today without a time
 def update_due_date_to_today(task_id, task_name):
     today_iso = datetime.date.today().isoformat()
-    url = f"https://api.notion.com/v1/pages/{task_id}"
-    payload = {"properties": {"Due": {"date": {"start": today_iso}}}}
+    # url = f"https://api.notion.com/v1/pages/{task_id}"
+    # payload = {"properties": {"Due": {"date": {"start": today_iso}}}}
     
     response = requests.patch(url, headers=headers, json=payload)
 
