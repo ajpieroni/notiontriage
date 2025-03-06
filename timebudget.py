@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 import os
 import logging
 import tzlocal
+import concurrent.futures
 
 # ------------------ Google Calendar Imports & Constants ------------------
 from google.auth.transport.requests import Request
@@ -104,9 +105,8 @@ daily_tasks = set([
     "Drink and Owala"
 ])
 
-def schedule_daily_tasks_in_event():
+def schedule_daily_tasks_in_event(calendar_events=None):
     """Schedules any tasks that match daily_tasks into the 'Wake Up and Morning Routine' event."""
-    # 1. Fetch all tasks due today and not done
     today_iso = datetime.datetime.now().date().isoformat()
     filter_payload = {
         "and": [
@@ -115,55 +115,42 @@ def schedule_daily_tasks_in_event():
         ]
     }
     tasks_today = fetch_tasks(filter_payload, [])
-
-    # 2. Filter for tasks whose names are in daily_tasks
-    unscheduled_daily_tasks = []
-    for t in tasks_today:
-        task_name = get_task_name(t["properties"])
-        if task_name in daily_tasks:
-            unscheduled_daily_tasks.append(t)
+    unscheduled_daily_tasks = [t for t in tasks_today if get_task_name(t["properties"]) in daily_tasks]
 
     if not unscheduled_daily_tasks:
         logger.info("No daily tasks found to schedule.")
         return
 
-    # 3. Fetch the 'Wake Up and Morning Routine' event
-    events = fetch_calendar_events()
-    matching_events = get_events_by_name(events, "Wake Up and Morning Routine")
+    # Use provided calendar events if available; otherwise, fetch them
+    if calendar_events is None:
+        calendar_events = fetch_calendar_events()
+    matching_events = get_events_by_name(calendar_events, "Wake Up and Morning Routine")
 
     if not matching_events:
         logger.warning("No 'Wake Up and Morning Routine' event found. Skipping daily tasks scheduling.")
         return
 
-    # 4. Schedule tasks in a round-robin style in the matching event(s)
     while unscheduled_daily_tasks:
         scheduling_happened = False
-
         for event in matching_events:
             event_start_str = event.get("start", {}).get("dateTime", event.get("start", {}).get("date"))
             event_end_str = event.get("end", {}).get("dateTime", event.get("end", {}).get("date"))
-
             if not event_start_str or not event_end_str:
                 logger.warning(f"Event missing start/end time. Skipping: {event.get('summary')}")
                 continue
 
             current_start_dt = datetime.datetime.fromisoformat(event_start_str).astimezone(LOCAL_TIMEZONE)
             event_end_dt = datetime.datetime.fromisoformat(event_end_str).astimezone(LOCAL_TIMEZONE)
-
-            now = datetime.datetime.now().astimezone(LOCAL_TIMEZONE)  # Get current time    
+            now = datetime.datetime.now().astimezone(LOCAL_TIMEZONE)
             if current_start_dt < now:
                 current_start_dt = now
-            
-            # logger.info(f"Processing event '{event_name}' from {current_start_dt} to {event_end_dt}")
-            
+
             while unscheduled_daily_tasks and (current_start_dt + datetime.timedelta(minutes=TASK_LENGTH_MEDIUM) <= event_end_dt):
                 task = unscheduled_daily_tasks.pop(0)
                 task_name = get_task_name(task["properties"])
                 task_id = task["id"]
-
                 duration = priority_to_time_block.get("Medium", TASK_LENGTH_MEDIUM)
                 new_end_dt = current_start_dt + datetime.timedelta(minutes=duration)
-
                 update_date_time(task_id, task_name, current_start_dt.isoformat(), new_end_dt.isoformat(), class_emoji="☕️")
                 current_start_dt = new_end_dt
                 scheduling_happened = True
@@ -190,7 +177,7 @@ def fetch_unscheduled_tasks_for_class(task_class):
             {"property": "Due", "date": {"equals": today}},
             {"property": "Class", "select": {"equals": task_class}},
             {"property": "Done", "checkbox": {"equals": False}},
-            {"property": "Assigned time", "checkbox": {"equals": False},}
+            {"property": "Assigned time", "checkbox": {"equals": False}}
         ]
     }
     sorts_payload = [{"timestamp": "created_time", "direction": "ascending"}]
@@ -275,13 +262,12 @@ def update_date_time(task_id, task_name, start_time, end_time, class_emoji):
     else:
         print(f"{class_emoji} '{task_name}' scheduled from {start_time} to {end_time}.")
 
-def schedule_tasks_for_mapping(event_name, task_class):
+def schedule_tasks_for_mapping(event_name, task_class, calendar_events=None):
     class_emoji = get_class_emoji(task_class)
     print(f"\nProcessing mapping: '{class_emoji} {event_name}' -> '{task_class}'")
-    
-    events = fetch_calendar_events()
-    matching_events = get_events_by_name(events, event_name)
-
+    if calendar_events is None:
+        calendar_events = fetch_calendar_events()
+    matching_events = get_events_by_name(calendar_events, event_name)
     if not matching_events:
         logger.warning(f"No future events found for '{event_name}'. Skipping.")
         return
@@ -292,41 +278,31 @@ def schedule_tasks_for_mapping(event_name, task_class):
         return
 
     unscheduled_tasks = tasks[:]
-    now = datetime.datetime.now().astimezone(LOCAL_TIMEZONE)  # Get current time
-
+    now = datetime.datetime.now().astimezone(LOCAL_TIMEZONE)
     while unscheduled_tasks:
         scheduling_happened = False
         for event in matching_events:
             event_start = event.get("start", {}).get("dateTime", event.get("start", {}).get("date"))
             event_end = event.get("end", {}).get("dateTime", event.get("end", {}).get("date"))
-
             if not event_start or not event_end:
                 logger.warning(f"Event '{event_name}' is missing start or end time. Skipping.")
                 continue
 
             current_start_dt = datetime.datetime.fromisoformat(event_start).astimezone(LOCAL_TIMEZONE)
             event_end_dt = datetime.datetime.fromisoformat(event_end).astimezone(LOCAL_TIMEZONE)
-
-            # Ensure the event is not in the past
-            print(f"now: {now}, event_end_dt: {event_end_dt}")
-            
             if event_end_dt <= now:
                 logger.warning(f"Skipping past event: {event_name} (ended at {event_end_dt})")
-                continue  # Ignore past events
+                continue
 
-            # If event starts in the past but extends into the future, use `now`
             if current_start_dt < now:
                 current_start_dt = now
-            
-            # logger.info(f"Processing event '{event_name}' from {current_start_dt} to {event_end_dt}")
-            
+
             while unscheduled_tasks and (current_start_dt + datetime.timedelta(minutes=TASK_LENGTH_MEDIUM) <= event_end_dt):
                 task = unscheduled_tasks.pop(0)
                 task_name = get_task_name(task["properties"])
                 task_id = task["id"]
                 duration = priority_to_time_block.get("Medium", TASK_LENGTH_MEDIUM)
                 new_end_dt = current_start_dt + datetime.timedelta(minutes=duration)
-
                 update_date_time(task_id, task_name, current_start_dt.isoformat(), new_end_dt.isoformat(), class_emoji)
                 current_start_dt = new_end_dt
                 scheduling_happened = True
@@ -337,13 +313,21 @@ def schedule_tasks_for_mapping(event_name, task_class):
         if not scheduling_happened:
             logger.warning(f"Could not schedule {len(unscheduled_tasks)} remaining tasks.")
             break
-def main():
-    # First schedule the tasks that match daily_tasks in 'Wake Up and Morning Routine'
-    schedule_daily_tasks_in_event()
 
-    # Then schedule other tasks based on class/event mappings
-    for event_name, task_class in calendar_task_mapping.items():
-        schedule_tasks_for_mapping(event_name, task_class)
+# --------------------------- MAIN ENTRY POINT ---------------------------
+def main():
+    # Fetch calendar events once to avoid redundant API calls
+    calendar_events = fetch_calendar_events()
+
+    # Use ThreadPoolExecutor to run scheduling functions concurrently
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = []
+        # Daily tasks scheduling
+        futures.append(executor.submit(schedule_daily_tasks_in_event, calendar_events))
+        # Class/event mappings scheduling
+        for event_name, task_class in calendar_task_mapping.items():
+            futures.append(executor.submit(schedule_tasks_for_mapping, event_name, task_class, calendar_events))
+        concurrent.futures.wait(futures)
 
 if __name__ == "__main__":
     main()
