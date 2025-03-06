@@ -24,8 +24,10 @@ headers = {
 
 # Function to fetch tasks that meet the criteria
 def fetch_incomplete_assigned_tasks():
+    tasks = []
+    next_cursor = None
     today_iso = datetime.date.today().isoformat()
-    
+
     filter_payload = {
         "and": [
             {"property": "Assigned time", "checkbox": {"equals": True}},
@@ -38,15 +40,29 @@ def fetch_incomplete_assigned_tasks():
         ]
     }
 
-    url = f"https://api.notion.com/v1/databases/{DATABASE_ID}/query"
-    response = requests.post(url, headers=headers, json={"filter": filter_payload})
+    while True:
+        payload = {"filter": filter_payload}
+        if next_cursor:
+            payload["start_cursor"] = next_cursor
 
-    if response.status_code != 200:
-        logger.error(f"Failed to fetch tasks: {response.status_code} - {response.text}")
-        return []
+        url = f"https://api.notion.com/v1/databases/{DATABASE_ID}/query"
+        response = requests.post(url, headers=headers, json=payload)
 
-    return response.json().get("results", [])
+        if response.status_code != 200:
+            logger.error(f"Failed to fetch tasks: {response.status_code} - {response.text}")
+            break
 
+        data = response.json()
+        tasks.extend(data.get("results", []))
+
+        # Stop if no more pages or 1000 tasks reached
+        if not data.get("has_more") or len(tasks) >= 1000:
+            break
+
+        next_cursor = data.get("next_cursor")
+
+    # Return only up to 1000 tasks
+    return tasks[:1000]
 # Function to extract the task name safely
 def get_task_name(task):
     try:
