@@ -102,11 +102,12 @@ daily_tasks = set([
     "NYT Mini",
     "Forest Prune",
     "Schedule Day",
-    "Drink and Owala"
+    "Drink and Owala",
+    "Too many items for "
 ])
 
 def schedule_daily_tasks_in_event(calendar_events=None):
-    """Schedules any tasks that match daily_tasks into the 'Wake Up and Morning Routine' event."""
+    """Schedules any tasks that match contain name daily_tasks into the 'Wake Up and Morning Routine' event."""
     today_iso = datetime.datetime.now().date().isoformat()
     filter_payload = {
         "and": [
