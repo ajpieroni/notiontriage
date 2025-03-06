@@ -312,7 +312,7 @@ def triage_unassigned_tasks():
         #     continue
         print(f"\n📝 Task: '{task_name}' is 'Unassigned'.")
         # (Since ACCEPT ALL is always true, we automatically set the task's priority and due date.)
-        chosen_priority = "Low"  # Default assignment; adjust as needed
+        chosen_priority = "High"  # Default assignment; adjust as needed
         update_date_time(task_id, task_name=task_name, priority=chosen_priority)
         today_local_date = datetime.datetime.now(LOCAL_TIMEZONE).date().isoformat()
         update_date_only(task_id, task_name=task_name, date_str=today_local_date)
