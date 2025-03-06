@@ -150,6 +150,12 @@ def schedule_daily_tasks_in_event():
             current_start_dt = datetime.datetime.fromisoformat(event_start_str).astimezone(LOCAL_TIMEZONE)
             event_end_dt = datetime.datetime.fromisoformat(event_end_str).astimezone(LOCAL_TIMEZONE)
 
+            now = datetime.datetime.now().astimezone(LOCAL_TIMEZONE)  # Get current time    
+            if current_start_dt < now:
+                current_start_dt = now
+            
+            # logger.info(f"Processing event '{event_name}' from {current_start_dt} to {event_end_dt}")
+            
             while unscheduled_daily_tasks and (current_start_dt + datetime.timedelta(minutes=TASK_LENGTH_MEDIUM) <= event_end_dt):
                 task = unscheduled_daily_tasks.pop(0)
                 task_name = get_task_name(task["properties"])
@@ -311,7 +317,9 @@ def schedule_tasks_for_mapping(event_name, task_class):
             # If event starts in the past but extends into the future, use `now`
             if current_start_dt < now:
                 current_start_dt = now
-
+            
+            # logger.info(f"Processing event '{event_name}' from {current_start_dt} to {event_end_dt}")
+            
             while unscheduled_tasks and (current_start_dt + datetime.timedelta(minutes=TASK_LENGTH_MEDIUM) <= event_end_dt):
                 task = unscheduled_tasks.pop(0)
                 task_name = get_task_name(task["properties"])
