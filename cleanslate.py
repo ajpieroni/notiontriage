@@ -12,7 +12,7 @@ load_dotenv()
 NOTION_API_KEY = os.getenv("NOTION_API_KEY")
 DATABASE_ID = os.getenv("DATABASE_ID")
 
-# Configure logging for cleaner output
+# Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger()
 
@@ -21,22 +21,25 @@ UTC = pytz.utc
 ET = pytz.timezone("America/New_York")  # Eastern Time Zone
 
 def get_today_datetime_range():
-    """Returns today's start and end time in UTC, ensuring correct handling of ET timezone shifts."""
+    """Returns today's start time and yesterday's start time to fetch overdue tasks."""
     now_utc = datetime.datetime.now(UTC)
 
-    start_of_today_et = now_utc.astimezone(ET).replace(hour=0, minute=0, second=0, microsecond=0)
-    start_of_today_utc = start_of_today_et.astimezone(UTC)
+    # Start of yesterday in ET, converted to UTC
+    yesterday_et = now_utc.astimezone(ET) - datetime.timedelta(days=1)
+    start_of_yesterday_et = yesterday_et.replace(hour=0, minute=0, second=0, microsecond=0)
+    start_of_yesterday_utc = start_of_yesterday_et.astimezone(UTC)
 
+    # End of today in ET (23:59:59), converted to UTC
     end_of_today_et = now_utc.astimezone(ET).replace(hour=23, minute=59, second=59, microsecond=999999)
     end_of_today_utc = end_of_today_et.astimezone(UTC)
 
-    return start_of_today_utc.isoformat(), end_of_today_utc.isoformat()
+    return start_of_yesterday_utc.isoformat(), end_of_today_utc.isoformat()
 
 def fetch_incomplete_assigned_tasks():
-    """Fetches all tasks that are due today in ET and meet the criteria."""
+    """Fetches tasks that are due today OR overdue."""
     tasks = []
     next_cursor = None
-    start_of_today, end_of_today = get_today_datetime_range()
+    start_of_yesterday, end_of_today = get_today_datetime_range()
 
     headers = {
         "Authorization": f"Bearer {NOTION_API_KEY}",
@@ -52,7 +55,7 @@ def fetch_incomplete_assigned_tasks():
             {"property": "Status", "status": {"does_not_equal": "Deprecated"}},
             {"property": "Status", "status": {"does_not_equal": "Handed Off"}},
             {"property": "Done", "checkbox": {"equals": False}},
-            {"property": "Due", "date": {"on_or_after": start_of_today}},
+            # Fetch overdue tasks (before today) and today's tasks
             {"property": "Due", "date": {"on_or_before": end_of_today}}
         ]
     }
@@ -77,7 +80,7 @@ def fetch_incomplete_assigned_tasks():
 
         next_cursor = data.get("next_cursor")
 
-    logger.info(f"✅ Total tasks fetched: {len(tasks)}")
+    logger.info(f"✅ Total tasks fetched (overdue + today): {len(tasks)}")
     return tasks[:1000]
 
 def get_task_name(task):
@@ -117,7 +120,7 @@ def update_due_date_to_today(task_id, task_name):
 
 def main():
     """Main execution."""
-    logger.info("📌 Fetching incomplete assigned tasks...")
+    logger.info("📌 Fetching overdue and today's tasks...")
     tasks = fetch_incomplete_assigned_tasks()
     
     if not tasks:
