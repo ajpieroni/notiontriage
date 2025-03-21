@@ -1,0 +1,11 @@
+
+def update_task_priority_and_estimated_time(task_id, new_priority, new_estimated_time):
+
+    url = f"https://api.notion.com/v1/pages/{task_id}"
+    payload = {
+        "properties": {
+            "Priority": {"status": {"name": new_priority}},
+            "Level of Effort": {"select": { "name": "new_estimated_time" }}
+        }
+          
+    }
