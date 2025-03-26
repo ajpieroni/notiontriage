@@ -130,45 +130,38 @@ def schedule_daily_tasks_in_event():
     # 3. Fetch the 'Wake Up and Morning Routine' event
     events = fetch_calendar_events()
     matching_events = get_events_by_name(events, "Wake Up and Morning Routine")
-
     if not matching_events:
         logger.warning("No 'Wake Up and Morning Routine' event found. Skipping daily tasks scheduling.")
         return
 
-    # 4. Schedule tasks in a round-robin style in the matching event(s)
+    # 4. Use the first matching event and loop through its time window repeatedly
+    event = matching_events[0]
+    event_start_str = event.get("start", {}).get("dateTime", event.get("start", {}).get("date"))
+    event_end_str = event.get("end", {}).get("dateTime", event.get("end", {}).get("date"))
+    if not event_start_str or not event_end_str:
+        logger.warning(f"Event missing start/end time. Skipping: {event.get('summary')}")
+        return
+
+    event_start_dt = datetime.datetime.fromisoformat(event_start_str).astimezone(LOCAL_TIMEZONE)
+    event_end_dt = datetime.datetime.fromisoformat(event_end_str).astimezone(LOCAL_TIMEZONE)
+    duration = priority_to_time_block.get("Medium", TASK_LENGTH_MEDIUM)
+    current_start_dt = event_start_dt
+
+    # Loop until all daily tasks are scheduled
     while unscheduled_daily_tasks:
-        scheduling_happened = False
+        task = unscheduled_daily_tasks.pop(0)
+        task_name = get_task_name(task["properties"])
+        task_id = task["id"]
+        new_end_dt = current_start_dt + datetime.timedelta(minutes=duration)
 
-        for event in matching_events:
-            event_start_str = event.get("start", {}).get("dateTime", event.get("start", {}).get("date"))
-            event_end_str = event.get("end", {}).get("dateTime", event.get("end", {}).get("date"))
+        update_date_time(task_id, task_name, current_start_dt.isoformat(), new_end_dt.isoformat(), class_emoji="☕️")
 
-            if not event_start_str or not event_end_str:
-                logger.warning(f"Event missing start/end time. Skipping: {event.get('summary')}")
-                continue
+        # Increment the start time for the next task
+        current_start_dt += datetime.timedelta(minutes=duration)
 
-            current_start_dt = datetime.datetime.fromisoformat(event_start_str).astimezone(LOCAL_TIMEZONE)
-            event_end_dt = datetime.datetime.fromisoformat(event_end_str).astimezone(LOCAL_TIMEZONE)
-
-            while unscheduled_daily_tasks and (current_start_dt + datetime.timedelta(minutes=TASK_LENGTH_MEDIUM) <= event_end_dt):
-                task = unscheduled_daily_tasks.pop(0)
-                task_name = get_task_name(task["properties"])
-                task_id = task["id"]
-
-                duration = priority_to_time_block.get("Medium", TASK_LENGTH_MEDIUM)
-                new_end_dt = current_start_dt + datetime.timedelta(minutes=duration)
-
-                update_date_time(task_id, task_name, current_start_dt.isoformat(), new_end_dt.isoformat(), class_emoji="☕️")
-                current_start_dt = new_end_dt
-                scheduling_happened = True
-
-            if not unscheduled_daily_tasks:
-                break
-
-        if not scheduling_happened:
-            logger.warning(f"Could not schedule {len(unscheduled_daily_tasks)} remaining daily tasks.")
-            break
-
+        # If the next time block would go past the event's end, loop back to the start
+        if current_start_dt + datetime.timedelta(minutes=duration) > event_end_dt:
+            current_start_dt = event_start_dt
 # --------------------------- UTILS ---------------------------
 def get_task_name(properties):
     try:
