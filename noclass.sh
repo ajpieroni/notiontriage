@@ -35,7 +35,7 @@ for TASK_TITLE in "$@"; do
         "parent": { "database_id": "'"$DATABASE_ID"'" },
         "properties": {
             "Name": {
-            "title ": [
+                "title": [
                     { "text": { "content": "'"$TASK_TITLE"'" } }
                 ]
             }
