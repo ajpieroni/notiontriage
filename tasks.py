@@ -23,10 +23,10 @@ for line in issues:
     print(f'- {line}')
 
 # Ask the user which target they want to run
-target = input("\nWhich command do you want to run? (colab, kyros, class): ").strip().lower()
-if target not in ["colab", "kyros", "class"]:
-    print("Invalid selection. Defaulting to 'kyros'.")
-    target = "kyros"
+target = input("\nWhich command do you want to run? (colab, kyros, class, noclass): ").strip().lower()
+if target not in ["colab", "kyros", "class", "noclass"]:
+    print("Invalid selection. Defaulting to 'noclass'.")
+    target = "noclass"
 
 # Generate the command for the chosen target.
 # This will call, for example, "./kyros.sh" and pass each issue as an argument.
