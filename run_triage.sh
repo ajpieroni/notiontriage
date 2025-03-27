@@ -15,6 +15,14 @@ echo -e "${GREEN}⏰ Script started at: $(date)${NC}"
 PROJECT_DIR="/Users/alexpieroni/Documents/Brain/Projects/notiontriage"
 cd "$PROJECT_DIR" || { echo -e "${RED}❌ Cannot change to project directory.${NC}"; exit 1; }
 
+if [ -f requirements.txt ]; then
+    echo -e "${YELLOW}📥 Installing dependencies from requirements.txt...${NC}"
+    pip install -r requirements.txt || { echo -e "${RED}❌ Failed to install dependencies from requirements.txt.${NC}"; exit 1; }
+else
+    echo -e "${RED}❌ requirements.txt file not found. Aborting.${NC}"
+    exit 1
+fi
+
 echo -e "${GREEN}🚀 Running master (skipping priority): scheduling (timebudget) -> triage -> duplicates...${NC}"
 
 # Run the scheduling step (cleanbeforenow) by executing cleanbeforenow.py directly
@@ -29,7 +37,7 @@ fi
 # Run the scheduling step (timebudget integration) by executing timebudget.py directly
 echo -e "${YELLOW}🗓️ Running timebudget...${NC}"
 echo -e "${YELLOW}🔍 Debug: Checking for tzlocal module before running timebudget.py...${NC}"
-python3 -c 'import tzlocal; print("tzlocal module is available, version:", tzlocal.__version__)' || {
+python3 -c 'import tzlocal; print("tzlocal module is available, local zone:", tzlocal.get_localzone())' || {
     echo -e "${RED}❌ tzlocal module not found. Here is pip freeze output:" 
     pip freeze | grep tzlocal
     echo -e "${RED}❌ Please install tzlocal (e.g., pip install tzlocal) and try again.${NC}"
