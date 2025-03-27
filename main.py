@@ -913,17 +913,17 @@ def run_gui():
     scheduler_tui.run()
 
 if __name__ == "__main__":
-    print("What would you like to do?")
-    print("[1] Just triage unassigned tasks")
-    print("[2] Schedule tasks")
-    print("[3] Both triage and schedule")
-    user_choice = input("Select an option: ").strip().lower()
-    if user_choice == "1":
+    # print("What would you like to do?")
+    # print("[1] Just triage unassigned tasks")
+    # print("[2] Schedule tasks")
+    # print("[3] Both triage and schedule")
+    # user_choice = input("Select an option: ").strip().lower()
+    # if user_choice == "1":
+    #     triage_unassigned_tasks()
+    # elif user_choice == "2":
+    #     assign_dues_and_blocks(test_mode=False)
+    # elif user_choice == "3":
         triage_unassigned_tasks()
-    elif user_choice == "2":
         assign_dues_and_blocks(test_mode=False)
-    elif user_choice == "3":
-        triage_unassigned_tasks()
-        assign_dues_and_blocks(test_mode=False)
-    else:
-        print("Invalid selection. Exiting.")
+    # else:
+    #     print("Invalid selection. Exiting.")
