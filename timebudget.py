@@ -155,7 +155,7 @@ def schedule_daily_tasks_in_event():
         new_end_dt = current_start_dt + datetime.timedelta(minutes=duration)
         
 
-        # if there isn't an task name in the database due toda, dont' schedule it
+        # if there isn't a task name in the database due today, don't schedule it
 
         # If there isn't a task name in the database due today, don't schedule it
 
