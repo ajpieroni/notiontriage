@@ -20,26 +20,12 @@ logger = logging.getLogger()
 UTC = pytz.utc
 ET = pytz.timezone("America/New_York")  # Eastern Time Zone
 
-def get_today_datetime_range():
-    """Returns today's start time and yesterday's start time to fetch overdue tasks."""
-    now_utc = datetime.datetime.now(UTC)
-
-    # Start of yesterday in ET, converted to UTC
-    yesterday_et = now_utc.astimezone(ET) - datetime.timedelta(days=1)
-    start_of_yesterday_et = yesterday_et.replace(hour=0, minute=0, second=0, microsecond=0)
-    start_of_yesterday_utc = start_of_yesterday_et.astimezone(UTC)
-
-    # End of today in ET (23:59:59), converted to UTC
-    end_of_today_et = now_utc.astimezone(ET).replace(hour=23, minute=59, second=59, microsecond=999999)
-    end_of_today_utc = end_of_today_et.astimezone(UTC)
-
-    return start_of_yesterday_utc.isoformat(), end_of_today_utc.isoformat()
-
 def fetch_incomplete_assigned_tasks():
-    """Fetches tasks that are due today OR overdue."""
+    """Fetches tasks that are overdue (due date before the current moment)."""
     tasks = []
     next_cursor = None
-    start_of_yesterday, end_of_today = get_today_datetime_range()
+    now_iso = datetime.datetime.now(UTC).isoformat()
+    # logger.info(f"Current UTC time for filtering tasks: {now_iso}")
 
     headers = {
         "Authorization": f"Bearer {NOTION_API_KEY}",
@@ -54,11 +40,14 @@ def fetch_incomplete_assigned_tasks():
             {"property": "Status", "status": {"does_not_equal": "Completed"}},
             {"property": "Status", "status": {"does_not_equal": "Deprecated"}},
             {"property": "Status", "status": {"does_not_equal": "Handed Off"}},
+            {"property": "Status", "status": {"does_not_equal": "In progress"}},
             {"property": "Done", "checkbox": {"equals": False}},
-            # Fetch overdue tasks (before today) and today's tasks
-            {"property": "Due", "date": {"on_or_before": end_of_today}}
+            # Only apply to tasks with a due date before the current time
+            {"property": "Due", "date": {"before": now_iso}}
         ]
     }
+    
+    # logger.info(f"Using filter payload: {filter_payload}")
 
     while True:
         payload = {"filter": filter_payload}
@@ -73,6 +62,7 @@ def fetch_incomplete_assigned_tasks():
             break
 
         data = response.json()
+        # logger.info(f"Fetched {len(data.get('results', []))} tasks in this batch.")
         tasks.extend(data.get("results", []))
 
         if not data.get("has_more") or len(tasks) >= 1000:
@@ -80,7 +70,7 @@ def fetch_incomplete_assigned_tasks():
 
         next_cursor = data.get("next_cursor")
 
-    logger.info(f"✅ Total tasks fetched (overdue + today): {len(tasks)}")
+    # logger.info(f"✅ Total overdue tasks fetched: {len(tasks)}")
     return tasks[:1000]
 
 def get_task_name(task):
@@ -90,17 +80,42 @@ def get_task_name(task):
     except (KeyError, IndexError, TypeError):
         return "Unnamed Task"
 
-def update_due_date_to_today(task_id, task_name):
-    """Updates the task's due date to today in ET while logging the response."""
+def update_due_date_to_today(task):
+    """Updates the task's due date to today in ET while logging the response. Skips tasks whose due start is after now."""
+    task_id = task["id"]
+    task_name = get_task_name(task)
+    
+    # Check if the task has a Due date and extract the start date
+    due_date_str = None
+    if "Due" in task["properties"] and task["properties"]["Due"]["date"] and "start" in task["properties"]["Due"]["date"]:
+        due_date_str = task["properties"]["Due"]["date"]["start"]
+
+    now_utc = datetime.datetime.now(UTC)
+    
+    if due_date_str:
+        try:
+            # Convert due_date_str to a datetime object (handle potential 'Z' suffix)
+            due_date = datetime.datetime.fromisoformat(due_date_str.replace('Z', '+00:00'))
+        except Exception as e:
+            logger.error(f"Error parsing due date for task '{task_name}': {e}")
+            due_date = None
+        
+        if due_date and due_date > now_utc:
+            # logger.info(f"Task '{task_name}' due start ({due_date}) is after now ({now_utc}). Running UNASSIGNED BEFORE NOW...")
+            return  # Skip updating if the due start is in the future
+    else:
+        logger.info(f"Task '{task_name}' has no due date; proceeding with update.")
+    
+    # logger.info(f"Attempting to update task {task_id} ('{task_name}') to new due date.")
     today_iso = datetime.datetime.now(UTC).date().isoformat()
     url = f"https://api.notion.com/v1/pages/{task_id}"
-
+    
     headers = {
         "Authorization": f"Bearer {NOTION_API_KEY}",
         "Content-Type": "application/json",
         "Notion-Version": "2022-06-28",
     }
-
+    
     payload = {
         "properties": {
             "Due": {
@@ -110,30 +125,34 @@ def update_due_date_to_today(task_id, task_name):
             }
         }
     }
+    
+    logger.debug(f"Payload for updating task {task_id}: {payload}")
 
     response = requests.patch(url, headers=headers, json=payload)
-
+    
     if response.status_code == 200:
-        logger.info(f"✅ Updated: '{task_name}'")
+        print(f"'\033[1m{task_name}\033[0m' has been pushed.")
     else:
-        logger.error(f"❌ Failed to update '{task_name}': {response.status_code} - {response.text}")
+        logger.error(f"Failed to update task '{task_name}': {response.status_code} - {response.text}")
 
 def main():
     """Main execution."""
-    print("📌 Fetching overdue and today's tasks...")
+    # logger.info("Starting main execution to update overdue tasks (excluding tasks 'In progress').")
+    print("📌 Fetching overdue tasks...")
     tasks = fetch_incomplete_assigned_tasks()
     
     if not tasks:
-        logger.info("🎉 No tasks to update!")
+        # logger.info("🎉 No tasks to update!")
+        print("✅ There are no tasks to update")
         return
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = []
         for task in tasks:
-            task_id = task["id"]
-            task_name = get_task_name(task)
-            futures.append(executor.submit(update_due_date_to_today, task_id, task_name))
+            futures.append(executor.submit(update_due_date_to_today, task))
         concurrent.futures.wait(futures)
+
+    # logger.info("Finished updating tasks.")
 
 if __name__ == "__main__":
     main()

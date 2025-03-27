@@ -6,6 +6,7 @@ import logging
 import pytz
 import tzlocal
 import calendar
+import argparse
 
 # ------------------ Google Calendar Imports & Constants ------------------
 from google.auth.transport.requests import Request
@@ -319,146 +320,6 @@ def triage_unassigned_tasks():
         print(f"📌 '{task_name}' priority set to {chosen_priority} and due today: {today_local_date}")
         previously_triaged.add(task_name)
 
-# --------------------------- CALENDAR INTEGRATION FUNCTIONS ---------------------------
-# def fetch_calendar_events(chosen_date=None):
-#     """Fetch calendar events from all relevant calendars for the given date (defaults to today)."""
-#     local_tz = tzlocal.get_localzone()
-#     now_local = datetime.datetime.now(local_tz).replace(second=0, microsecond=0)
-#     if not chosen_date:
-#         chosen_date = now_local.date()
-#     start_of_day_local = datetime.datetime.combine(chosen_date, datetime.time(0, 0), tzinfo=local_tz)
-#     end_of_day_local = start_of_day_local + datetime.timedelta(days=1)
-#     time_min = start_of_day_local.isoformat()
-#     time_max = end_of_day_local.isoformat()
-#     events = []
-#     creds = None
-#     if os.path.exists("token.json"):
-#         creds = Credentials.from_authorized_user_file("token.json", SCOPES)
-#     if not creds or not creds.valid:
-#         if creds and creds.expired and creds.refresh_token:
-#             creds.refresh(Request())
-#         else:
-#             flow = InstalledAppFlow.from_client_secrets_file("credentials.json", SCOPES)
-#             creds = flow.run_local_server(port=0)
-#         with open("token.json", "w") as token:
-#             token.write(creds.to_json())
-#     try:
-#         service = build("calendar", "v3", credentials=creds)
-#         for cal_id in RELEVANT_CAL_IDS:
-#             try:
-#                 events_result = service.events().list(
-#                     calendarId=cal_id,
-#                     timeMin=time_min,
-#                     timeMax=time_max,
-#                     maxResults=50,
-#                     singleEvents=True,
-#                     orderBy="startTime",
-#                 ).execute()
-#                 cal_events = events_result.get("items", [])
-#                 events.extend(cal_events)
-#             except HttpError as error:
-#                 logger.error(f"Failed to fetch events for calendar {cal_id}: {error}")
-#     except HttpError as error:
-#         logger.error(f"An error occurred: {error}")
-#     return events
-
-# def get_tec_office_hours_event(events):
-#     """Return the first event with 'TEC Office Hours' in its summary."""
-#     for event in events:
-#         summary = event.get("summary", "")
-#         if "TEC Office Hours" in summary:
-#             return event
-#     return None
-
-# def update_colab_tasks_due(office_hours_event):
-#     """For any task with Class 'Co-Lab', update its due date/time to match the TEC Office Hours event."""
-#     if not office_hours_event:
-#         return
-#     start_obj = office_hours_event.get("start")
-#     end_obj = office_hours_event.get("end")
-#     if not start_obj or not end_obj:
-#         logger.error("TEC Office Hours event is missing a start or end time.")
-#         return
-#     start_time = start_obj.get("dateTime", start_obj.get("date"))
-#     end_time = end_obj.get("dateTime", end_obj.get("date"))
-#     if not start_time or not end_time:
-#         logger.error("TEC Office Hours event does not contain valid start/end values.")
-#         return
-#     all_tasks = fetch_all_tasks_sorted_by_created(assigned_time_equals=False)
-#     for task in all_tasks:
-#         class_value = task.get("properties", {}).get("Class", {}).get("select", {}).get("name")
-#         if class_value == "Co-Lab":
-#             task_id = task["id"]
-#             task_name = get_task_name(task.get("properties", {}))
-#             update_date_time(task_id, task_name=task_name, start_time=start_time, end_time=end_time)
-#             print(f"Updated '{task_name}' to TEC Office Hours block: {start_time} - {end_time}")
-
-# def get_academics_events(events):
-#     """Return a list of events that contain 'academics' in their summary (case-insensitive)."""
-#     academics = []
-#     for event in events:
-#         summary = event.get("summary", "")
-#         if "academics" in summary.lower():
-#             academics.append(event)
-#     return academics
-
-# def update_academics_tasks_due(academics_events):
-#     """For any task with Class 'Academics', update its due date/time in a round-robin fashion from academics events."""
-#     if not academics_events:
-#         return
-#     sorted_events = sorted(
-#         academics_events,
-#         key=lambda event: event["start"].get("dateTime", event["start"].get("date"))
-#     )
-#     all_tasks = fetch_all_tasks_sorted_by_created(assigned_time_equals=False)
-#     academics_tasks = [
-#         task for task in all_tasks
-#         if task.get("properties", {}).get("Class", {}).get("select", {}).get("name") == "Academics"
-#     ]
-#     if not academics_tasks:
-#         return
-#     for i, task in enumerate(academics_tasks):
-#         event = sorted_events[i % len(sorted_events)]
-#         start_time = event["start"].get("dateTime", event["start"].get("date"))
-#         end_time = event["end"].get("dateTime", event["end"].get("date"))
-#         task_id = task["id"]
-#         task_name = get_task_name(task.get("properties", {}))
-#         update_date_time(task_id, task_name=task_name, start_time=start_time, end_time=end_time)
-#         print(f"Updated '{task_name}' to Academics block: {start_time} - {end_time}")
-
-# def get_kyros_events(events):
-#     """Return a list of events that contain 'kyros' in their summary (case-insensitive)."""
-#     kyros_events = []
-#     for event in events:
-#         summary = event.get("summary", "")
-#         if "kyros" in summary.lower():
-#             kyros_events.append(event)
-#     return kyros_events
-
-# def update_kyros_tasks_due(kyros_events):
-#     """For any task with Class 'Kyros', update its due date/time in a round-robin fashion from kyros events."""
-#     if not kyros_events:
-#         return
-#     sorted_events = sorted(
-#         kyros_events,
-#         key=lambda event: event["start"].get("dateTime", event["start"].get("date"))
-#     )
-#     all_tasks = fetch_all_tasks_sorted_by_created(assigned_time_equals=False)
-#     kyros_tasks = [
-#         task for task in all_tasks
-#         if task.get("properties", {}).get("Class", {}).get("select", {}).get("name") == "Kyros"
-#     ]
-#     if not kyros_tasks:
-#         return
-#     for i, task in enumerate(kyros_tasks):
-#         event = sorted_events[i % len(sorted_events)]
-#         start_time = event["start"].get("dateTime", event["start"].get("date"))
-#         end_time = event["end"].get("dateTime", event["end"].get("date"))
-#         task_id = task["id"]
-#         task_name = get_task_name(task.get("properties", {}))
-#         update_date_time(task_id, task_name=task_name, start_time=start_time, end_time=end_time)
-#         print(f"Updated '{task_name}' to Kyros block: {start_time} - {end_time}")
-
 # --------------------------- OVERLAP & FREE BLOCKS ---------------------------
 def check_for_overlap(current_schedule, proposed_start, proposed_end):
     proposed_start_utc = proposed_start.astimezone(datetime.timezone.utc)
@@ -748,19 +609,21 @@ def schedule_tasks_in_pattern(tasks, test_mode=False, starting_time=None, schedu
         current_time = new_time
 
 # --------------------------- MAIN ENTRY POINT FOR SCHEDULING ---------------------------
-def assign_dues_and_blocks(test_mode=False):
+def assign_dues_and_blocks(test_mode=False, schedule_day_input=None):
     """
     Main entry point to fetch tasks, triage, create 'Schedule Day' task, update tasks based on calendar events,
     and schedule everything with date/time blocks.
     """
-    schedule_day_input = input("When do you want to schedule for? (today, tomorrow): ").strip().lower()
+    # Use the provided argument if available; otherwise prompt the user.
+    if schedule_day_input is None:
+        schedule_day_input = input("When do you want to schedule for? (today, tomorrow): ").strip().lower()
+
     if schedule_day_input == "tomorrow":
         schedule_tomorrow()
         schedule_complete()
         return
     elif schedule_day_input != "today":
         print("Unrecognized choice. Defaulting to scheduling for today.")
-
     # # --- Fetch calendar events and update tasks based on event blocks ---
     # try:
     #     cal_events = fetch_calendar_events()  # Defaults to today
@@ -913,17 +776,20 @@ def run_gui():
     scheduler_tui.run()
 
 if __name__ == "__main__":
-    print("What would you like to do?")
-    print("[1] Just triage unassigned tasks")
-    print("[2] Schedule tasks")
-    print("[3] Both triage and schedule")
-    user_choice = input("Select an option: ").strip().lower()
-    if user_choice == "1":
-        triage_unassigned_tasks()
-    elif user_choice == "2":
-        assign_dues_and_blocks(test_mode=False)
-    elif user_choice == "3":
-        triage_unassigned_tasks()
-        assign_dues_and_blocks(test_mode=False)
-    else:
-        print("Invalid selection. Exiting.")
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Schedule tasks for today or tomorrow.")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--today", action="store_true", help="Schedule tasks for today.")
+    group.add_argument("--tomorrow", action="store_true", help="Schedule tasks for tomorrow.")
+    args = parser.parse_args()
+
+    schedule_day = None
+    if args.today:
+        schedule_day = "today"
+    elif args.tomorrow:
+        schedule_day = "tomorrow"
+
+    # Call your functions with the provided argument.
+    triage_unassigned_tasks()
+    assign_dues_and_blocks(test_mode=False, schedule_day_input=schedule_day)
