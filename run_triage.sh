@@ -28,6 +28,13 @@ fi
 
 # Run the scheduling step (timebudget integration) by executing timebudget.py directly
 echo -e "${YELLOW}🗓️ Running timebudget...${NC}"
+echo -e "${YELLOW}🔍 Debug: Checking for tzlocal module before running timebudget.py...${NC}"
+python3 -c 'import tzlocal; print("tzlocal module is available, version:", tzlocal.__version__)' || {
+    echo -e "${RED}❌ tzlocal module not found. Here is pip freeze output:" 
+    pip freeze | grep tzlocal
+    echo -e "${RED}❌ Please install tzlocal (e.g., pip install tzlocal) and try again.${NC}"
+    exit 1
+}
 python3 timebudget.py
 if [ $? -ne 0 ]; then
     echo -e "${RED}❌ Scheduling (timebudget) failed. Aborting master.${NC}"
@@ -62,4 +69,4 @@ echo -e "${GREEN}⏰ Finished at: $(date)${NC}"
 echo -e "${GREEN}⏱ Total elapsed time: ${elapsed} seconds.${NC}"
 
 # Deactivate the virtual environment after execution
-# deactivate
+deactivate
