@@ -105,7 +105,7 @@ def update_due_date_to_today(task_id, task_name):
 
 def main():
     """Main execution."""
-    logger.info("📌 Fetching overdue tasks...")
+    print("📌 Fetching overdue tasks...")
     tasks = fetch_incomplete_assigned_tasks()
     
     if not tasks:

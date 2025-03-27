@@ -1,10 +1,7 @@
-List
-
-- [ ] T shot
 - [ ] Bracelet
+- [ ] Intent to leave lease
 - [ ] Refer Avantika to kyros TA
 - [ ] I’ll connect you with Eliana Durkee –– math tutoring. 
-- [ ] LMD for 3/27
 - [ ] Follow up with Liz if don’t hear from CJ and John by EOD Wed March 26
 - [ ] Add surgery specifics into calendar 
 - [ ] move notes tasks into notion
@@ -31,13 +28,3 @@ List
 - [ ] Photo of franny chocolate (save to gift database)
 - [ ] Make sure Sam removed at end of March
 - [ ] check surgery pre eating and if that works with dinner before
-- [x] consolidate NYC stuff
-- [x] move zach’s steak
-
-
-List of stuff i’ve ordered for leah
-- nicole
-- etty unlined
-- tammy unlined
-- lynn unlined
-- rosie unlined

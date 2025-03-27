@@ -1,54 +1,62 @@
 #!/bin/zsh
+# Define color variables
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
 # Define project directory
 PROJECT_DIR="/Users/alexpieroni/Documents/Brain/Projects/notiontriage"
-cd "$PROJECT_DIR" || { echo "❌ Cannot change to project directory."; exit 1; }
-
-# (Optional) Source a file with function definitions if needed:
-# source ./functions.sh
+cd "$PROJECT_DIR" || { echo -e "${RED}❌ Cannot change to project directory.${NC}"; exit 1; }
 
 # Create the virtual environment if it doesn't exist
 if [ ! -d "venv" ]; then
-    echo "🔧 Creating virtual environment..."
-    python3 -m venv venv || { echo "❌ Failed to create virtual environment."; exit 1; }
+    echo -e "${YELLOW}🔧 Creating virtual environment...${NC}"
+    python3 -m venv venv || { echo -e "${RED}❌ Failed to create virtual environment.${NC}"; exit 1; }
 fi
 
 # Activate the virtual environment
-source venv/bin/activate || { echo "❌ Failed to activate virtual environment."; exit 1; }
+source venv/bin/activate || { echo -e "${RED}❌ Failed to activate virtual environment.${NC}"; exit 1; }
 
-echo "🚀 Running master (skipping priority): scheduling (timebudget) -> triage -> duplicates..."
+echo -e "${GREEN}🚀 Running master (skipping priority): scheduling (timebudget) -> triage -> duplicates...${NC}"
 
-# Run the scheduling step (timebudget integration)
-echo "Running timebudget..."
-timebudget
+# Run the scheduling step (timebudget integration) by executing timebudget.py directly
+echo -e "${YELLOW}Running UNASSIGNED BEFORE NOW...${NC}"
+python3 cleanbeforenow.py
 if [ $? -ne 0 ]; then
-    echo "❌ Scheduling (timebudget) failed. Aborting master."
+    echo -e "${RED}❌ Scheduling (timebudget) failed. Aborting master.${NC}"
     deactivate
     exit 1
 fi
 
-# Run the triage step
-echo "Running triage..."
-triage
+# Run the scheduling step (timebudget integration) by executing timebudget.py directly
+echo -e "${YELLOW}Running timebudget...${NC}"
+python3 timebudget.py
 if [ $? -ne 0 ]; then
-    echo "❌ Triage failed. Aborting master."
+    echo -e "${RED}❌ Scheduling (timebudget) failed. Aborting master.${NC}"
     deactivate
     exit 1
 fi
 
-# Run the duplicates step
-echo "Running duplicates..."
-duplicates
+# Run the triage step by executing main.py directly
+echo -e "${YELLOW}Running triage...${NC}"
+python3 main.py --today
 if [ $? -ne 0 ]; then
-    echo "❌ Duplicates failed. Aborting master."
+    echo -e "${RED}❌ Triage failed. Aborting master.${NC}"
     deactivate
     exit 1
 fi
 
-echo "✅ All steps completed successfully!"
+# Run the duplicates step by executing duplicates.py directly
+echo -e "${YELLOW}Running duplicates...${NC}"
+python3 duplicates.py
+if [ $? -ne 0 ]; then
+    echo -e "${RED}❌ Duplicates failed. Aborting master.${NC}"
+    deactivate
+    exit 1
+fi
 
-# Optionally, if main.py does additional work (and accepts a --today flag),
-# you can run it non-interactively. For example:
-# printf "today\n" | python3 main.py --today
+echo -e "${GREEN}✅ All steps completed successfully!${NC}"
 
 # Deactivate the virtual environment after execution
 deactivate
