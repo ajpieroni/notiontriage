@@ -23,48 +23,40 @@ else
     exit 1
 fi
 
-echo -e "${GREEN}🚀 Running master (skipping priority): scheduling (timebudget) -> triage -> duplicates...${NC}"
+echo -e "${GREEN}🚀 Running master concurrently: scheduling (timebudget), triage, duplicates...${NC}"
+
+# Array to hold background process IDs
+pids=()
 
 # Run the scheduling step (cleanbeforenow) by executing cleanbeforenow.py directly
 echo -e "${YELLOW}Running UNASSIGNED BEFORE NOW...${NC}"
-python3 cleanbeforenow.py
-if [ $? -ne 0 ]; then
-    echo -e "${RED}❌ Scheduling (cleanbeforenow) failed. Aborting master.${NC}"
-    deactivate
-    exit 1
-fi
+python3 cleanbeforenow.py &
+pids+=($!)
 
 # Run the scheduling step (timebudget integration) by executing timebudget.py directly
 echo -e "${YELLOW}🗓️ Running timebudget...${NC}"
-# echo -e "${YELLOW}🔍 Debug: Checking for tzlocal module before running timebudget.py...${NC}"
-# python3 -c 'import tzlocal; print("tzlocal module is available, local zone:", tzlocal.get_localzone())' || {
-#     echo -e "${RED}❌ tzlocal module not found. Here is pip freeze output:" 
-#     pip freeze | grep tzlocal
-#     echo -e "${RED}❌ Please install tzlocal (e.g., pip install tzlocal) and try again.${NC}"
-#     exit 1
-# }
-python3 timebudget.py
-if [ $? -ne 0 ]; then
-    echo -e "${RED}❌ Scheduling (timebudget) failed. Aborting master.${NC}"
-    deactivate
-    exit 1
-fi
+python3 timebudget.py &
+pids+=($!)
 
 # Run the triage step by executing main.py directly
 echo -e "${YELLOW}🚦 Running triage...${NC}"
-python3 main.py --today
-if [ $? -ne 0 ]; then
-    echo -e "${RED}❌ Triage failed. Aborting master.${NC}"
-    deactivate
-    exit 1
-fi
+python3 main.py --today &
+pids+=($!)
 
 # Run the duplicates step by executing duplicates.py directly
-echo -e "${YELLOW}🧹Running duplicates...${NC}"
-python3 duplicates.py
-if [ $? -ne 0 ]; then
-    echo -e "${RED}❌ Duplicates failed. Aborting master.${NC}"
-    deactivate
+echo -e "${YELLOW}🧹 Running duplicates...${NC}"
+python3 duplicates.py &
+pids+=($!)
+
+# Wait for all background processes and capture errors
+error=0
+for pid in "${pids[@]}"; do
+    wait "$pid" || error=1
+done
+
+if [ $error -ne 0 ]; then
+    echo -e "${RED}❌ One or more steps failed. Aborting master.${NC}"
+    conda deactivate
     exit 1
 fi
 
