@@ -153,6 +153,13 @@ def schedule_daily_tasks_in_event():
         task_name = get_task_name(task["properties"])
         task_id = task["id"]
         new_end_dt = current_start_dt + datetime.timedelta(minutes=duration)
+        
+        # if there isn't an task name in the database due toda, dont' schedule it
+        # Skip scheduling if the task already has a due date set
+        if task["properties"].get("Due", {}).get("date", {}).get("start"):
+            # print(f"⚠️ '{task_name}' already has a due date. Skipping.")
+            continue
+        
 
         update_date_time(task_id, task_name, current_start_dt.isoformat(), new_end_dt.isoformat(), class_emoji="☕️")
 
