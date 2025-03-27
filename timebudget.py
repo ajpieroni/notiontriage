@@ -153,6 +153,13 @@ def schedule_daily_tasks_in_event():
         task_name = get_task_name(task["properties"])
         task_id = task["id"]
         new_end_dt = current_start_dt + datetime.timedelta(minutes=duration)
+        
+        # If there isn't a task name in the database due today, don't schedule it
+        # Skip scheduling if the task already has a due date set
+        if task["properties"].get("Due", {}).get("date", {}).get("start"):
+            # print(f"⚠️ '{task_name}' already has a due date. Skipping.")
+            continue
+        
 
         update_date_time(task_id, task_name, current_start_dt.isoformat(), new_end_dt.isoformat(), class_emoji="☕️")
 
@@ -250,6 +257,11 @@ calendar_task_mapping = {
 }
 
 def update_date_time(task_id, task_name, start_time, end_time, class_emoji):
+    now_dt = datetime.datetime.now(LOCAL_TIMEZONE)
+    end_dt = datetime.datetime.fromisoformat(end_time).astimezone(LOCAL_TIMEZONE)
+    if end_dt < now_dt:
+        end_time = now_dt.isoformat()
+
     url = f"https://api.notion.com/v1/pages/{task_id}"
     payload = {
         "properties": {
@@ -292,6 +304,9 @@ def schedule_tasks_for_mapping(event_name, task_class):
                 continue
 
             current_start_dt = datetime.datetime.fromisoformat(event_start).astimezone(LOCAL_TIMEZONE)
+            now_dt = datetime.datetime.now(LOCAL_TIMEZONE)
+            if current_start_dt < now_dt:
+                current_start_dt = now_dt
             event_end_dt = datetime.datetime.fromisoformat(event_end).astimezone(LOCAL_TIMEZONE)
 
             while unscheduled_tasks and (current_start_dt + datetime.timedelta(minutes=TASK_LENGTH_MEDIUM) <= event_end_dt):
