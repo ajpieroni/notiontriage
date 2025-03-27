@@ -143,6 +143,7 @@ def main():
     
     if not tasks:
         # logger.info("🎉 No tasks to update!")
+        print("✅ There are no tasks to update")
         return
 
     with concurrent.futures.ThreadPoolExecutor() as executor:

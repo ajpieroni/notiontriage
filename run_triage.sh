@@ -77,4 +77,4 @@ echo -e "${GREEN}⏰ Finished at: $(date)${NC}"
 echo -e "${GREEN}⏱ Total elapsed time: ${elapsed} seconds.${NC}"
 
 # Deactivate the virtual environment after execution
-deactivate
+conda deactivate
