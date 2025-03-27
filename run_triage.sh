@@ -1,4 +1,6 @@
 #!/bin/zsh
+# Check if the script was invoked with the argument 'Daily'
+
 # Define color variables
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -12,15 +14,6 @@ echo -e "${GREEN}⏰ Script started at: $(date)${NC}"
 # Define project directory
 PROJECT_DIR="/Users/alexpieroni/Documents/Brain/Projects/notiontriage"
 cd "$PROJECT_DIR" || { echo -e "${RED}❌ Cannot change to project directory.${NC}"; exit 1; }
-
-# Create the virtual environment if it doesn't exist
-if [ ! -d "venv" ]; then
-    echo -e "${YELLOW}🔧 Creating virtual environment...${NC}"
-    python3 -m venv venv || { echo -e "${RED}❌ Failed to create virtual environment.${NC}"; exit 1; }
-fi
-
-# Activate the virtual environment
-source venv/bin/activate || { echo -e "${RED}❌ Failed to activate virtual environment.${NC}"; exit 1; }
 
 echo -e "${GREEN}🚀 Running master (skipping priority): scheduling (timebudget) -> triage -> duplicates...${NC}"
 
