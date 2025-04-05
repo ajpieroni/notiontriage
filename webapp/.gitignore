@@ -1,0 +1,89 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+../node_modules/
+../package-lock.json
+../package.json
+../install.log
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+../next.config.js
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+*.log
+install.log
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*.local
+.env
+*.env
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+
+# logs
+*.log
+logs
+*.log.*
+launchd_*.log
+cron_*.log
+
+# cache
+.cache/
+.npm/
+.eslintcache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# system
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# parent directory
+../node_modules/
+../package-lock.json
+../package.json
+../next.config.js
+../install.log 

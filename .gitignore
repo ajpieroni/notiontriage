@@ -1,15 +1,50 @@
-# Ignore the virtual environment directory
+# Python specific
 venv/
-.env
-# Ignore Python bytecode files
 *.pyc
 *.pyo
 __pycache__/
+.env
+.Python
+env/
+ENV/
+env.bak/
+venv.bak/
 
-# Ignore other specific files, if necessary
-*.log.DS_Store
+# Node.js specific (for webapp)
+node_modules/
+.next/
+out/
+build/
+.npm/
+.eslintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment and secrets
+.env
+.env*.local
+*.env
 token.json
 credentials.json
 .token 2.json
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# System files
 .DS_Store
+Thumbs.db
+*.log
 install.log
+launchd_*.log
+cron_*.log
+
+# Testing and cache
+coverage/
+.pytest_cache/
+.coverage
+htmlcov/
