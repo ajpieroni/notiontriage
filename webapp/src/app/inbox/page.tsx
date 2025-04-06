@@ -2,11 +2,44 @@ import { Suspense } from 'react';
 import Link from 'next/link';
 
 async function getInboxTasks() {
-  const res = await fetch(`${process.env.VERCEL_URL || 'http://localhost:3002'}/api/inbox`, {
-    cache: 'no-store'
-  });
-  if (!res.ok) throw new Error('Failed to fetch inbox tasks');
-  return res.json();
+  try {
+    console.log('Fetching inbox tasks...');
+    const apiUrl = `${process.env.VERCEL_URL || 'http://localhost:3000'}/api/inbox`;
+    console.log('API URL:', apiUrl);
+    
+    const res = await fetch(apiUrl, {
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    console.log('Response status:', res.status);
+    
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error('API Error:', {
+        status: res.status,
+        statusText: res.statusText,
+        error: errorText
+      });
+      throw new Error(`Failed to fetch inbox tasks: ${res.status} ${res.statusText}`);
+    }
+    
+    const data = await res.json();
+    console.log('API Response:', data);
+    
+    return {
+      needsTriage: Array.isArray(data.needsTriage) ? data.needsTriage : [],
+      highPriority: Array.isArray(data.highPriority) ? data.highPriority : []
+    };
+  } catch (error) {
+    console.error('Error in getInboxTasks:', error);
+    return {
+      needsTriage: [],
+      highPriority: []
+    };
+  }
 }
 
 function TaskCard({ task }: { task: any }) {
@@ -49,6 +82,7 @@ function TaskCard({ task }: { task: any }) {
 
 function InboxContent() {
   const { needsTriage, highPriority } = getInboxTasks();
+  console.log('InboxContent render:', { needsTriage, highPriority });
 
   return (
     <div className="max-w-4xl mx-auto p-6">
@@ -57,7 +91,7 @@ function InboxContent() {
       <div className="mb-12">
         <h2 className="text-2xl font-semibold mb-4">Needs Triage</h2>
         <div className="space-y-4">
-          {needsTriage.length > 0 ? (
+          {Array.isArray(needsTriage) && needsTriage.length > 0 ? (
             needsTriage.map((task: any) => (
               <TaskCard key={task.id} task={task} />
             ))
@@ -70,7 +104,7 @@ function InboxContent() {
       <div>
         <h2 className="text-2xl font-semibold mb-4">High Priority Tasks</h2>
         <div className="space-y-4">
-          {highPriority.length > 0 ? (
+          {Array.isArray(highPriority) && highPriority.length > 0 ? (
             highPriority.map((task: any) => (
               <TaskCard key={task.id} task={task} />
             ))

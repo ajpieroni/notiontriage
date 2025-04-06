@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "regions": ["sfo1"],
+  "env": {
+    "NOTION_API_KEY": "@notion_api_key",
+    "DATABASE_ID": "@notion_database_id",
+    "GOOGLE_CREDENTIALS": "@google_credentials"
+  },
+  "github": {
+    "silent": true,
+    "autoJobCancelation": true
+  }
+} 

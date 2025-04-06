@@ -2,7 +2,7 @@ import Link from 'next/link'
 
 async function getTasks() {
   try {
-    const res = await fetch(`${process.env.VERCEL_URL || 'http://localhost:3002'}/api/tasks`, {
+    const res = await fetch(`${process.env.VERCEL_URL || 'http://localhost:3000'}/api/tasks`, {
       cache: 'no-store'
     });
     if (!res.ok) throw new Error('Failed to fetch tasks');
