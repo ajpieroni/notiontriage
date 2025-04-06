@@ -8,7 +8,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     <ThemeProvider>
       <div className="min-h-full">
         <Header />
-        <main className="py-10">
+        <main>
           {children}
         </main>
       </div>

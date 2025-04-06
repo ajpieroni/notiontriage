@@ -17,7 +17,7 @@ interface Task {
       };
     };
     Status: {
-      select: {
+      status: {
         name: string;
       };
     };
@@ -32,7 +32,7 @@ interface Task {
 function TaskCard({ task }: { task: Task }) {
   const title = task.properties.Name?.title[0]?.plain_text || 'Untitled';
   const priority = task.properties.Priority?.select?.name || 'Not Set';
-  const status = task.properties.Status?.select?.name || 'Not Set';
+  const status = task.properties.Status?.status?.name || 'Not Set';
   const dueDate = task.properties.Due?.date?.start;
 
   return (

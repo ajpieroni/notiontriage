@@ -7,11 +7,6 @@ const notion = new Client({
 
 export async function GET() {
   try {
-    // First, get the database schema to check property types
-    const database = await notion.databases.retrieve({
-      database_id: process.env.DATABASE_ID!,
-    });
-
     // Get tasks that need triage (no priority or status set)
     const response = await notion.databases.query({
       database_id: process.env.DATABASE_ID!,
