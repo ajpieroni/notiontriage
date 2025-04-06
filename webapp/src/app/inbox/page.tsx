@@ -1,48 +1,35 @@
-import { Suspense } from 'react';
-import Link from 'next/link';
+'use client';
 
-async function getInboxTasks() {
-  try {
-    console.log('Fetching inbox tasks...');
-    const apiUrl = `${process.env.VERCEL_URL || 'http://localhost:3000'}/api/inbox`;
-    console.log('API URL:', apiUrl);
-    
-    const res = await fetch(apiUrl, {
-      cache: 'no-store',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-    
-    console.log('Response status:', res.status);
-    
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error('API Error:', {
-        status: res.status,
-        statusText: res.statusText,
-        error: errorText
-      });
-      throw new Error(`Failed to fetch inbox tasks: ${res.status} ${res.statusText}`);
-    }
-    
-    const data = await res.json();
-    console.log('API Response:', data);
-    
-    return {
-      needsTriage: Array.isArray(data.needsTriage) ? data.needsTriage : [],
-      highPriority: Array.isArray(data.highPriority) ? data.highPriority : []
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { getApiUrl } from '@/utils/api';
+import { getCachedData, setCachedData, CACHE_KEYS } from '@/utils/cache';
+
+interface Task {
+  id: string;
+  properties: {
+    Name: {
+      title: [{ plain_text: string }];
     };
-  } catch (error) {
-    console.error('Error in getInboxTasks:', error);
-    return {
-      needsTriage: [],
-      highPriority: []
+    Priority: {
+      select: {
+        name: string;
+      };
     };
-  }
+    Status: {
+      select: {
+        name: string;
+      };
+    };
+    Due: {
+      date: {
+        start: string;
+      };
+    };
+  };
 }
 
-function TaskCard({ task }: { task: any }) {
+function TaskCard({ task }: { task: Task }) {
   const title = task.properties.Name?.title[0]?.plain_text || 'Untitled';
   const priority = task.properties.Priority?.select?.name || 'Not Set';
   const status = task.properties.Status?.select?.name || 'Not Set';
@@ -80,9 +67,64 @@ function TaskCard({ task }: { task: any }) {
   );
 }
 
-function InboxContent() {
-  const { needsTriage, highPriority } = getInboxTasks();
-  console.log('InboxContent render:', { needsTriage, highPriority });
+export default function InboxPage() {
+  const [needsTriage, setNeedsTriage] = useState<Task[]>([]);
+  const [highPriority, setHighPriority] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchInboxTasks = async () => {
+      try {
+        // Try to get cached data first
+        const cachedData = getCachedData<{ needsTriage: Task[]; highPriority: Task[] }>(CACHE_KEYS.INBOX);
+        if (cachedData) {
+          setNeedsTriage(cachedData.needsTriage);
+          setHighPriority(cachedData.highPriority);
+          setLoading(false);
+          return;
+        }
+
+        // If no cache, fetch from API
+        const response = await fetch(getApiUrl('/api/inbox'));
+        if (!response.ok) {
+          throw new Error(`Failed to fetch inbox tasks: ${response.status} ${response.statusText}`);
+        }
+        const data = await response.json();
+        
+        // Cache the results
+        setCachedData(CACHE_KEYS.INBOX, data);
+        
+        setNeedsTriage(data.needsTriage || []);
+        setHighPriority(data.highPriority || []);
+      } catch (err) {
+        console.error('Error fetching inbox tasks:', err);
+        setError(err instanceof Error ? err.message : 'Failed to fetch inbox tasks');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchInboxTasks();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 dark:border-white"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+          <p>Error: {error}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto p-6">
@@ -91,8 +133,8 @@ function InboxContent() {
       <div className="mb-12">
         <h2 className="text-2xl font-semibold mb-4">Needs Triage</h2>
         <div className="space-y-4">
-          {Array.isArray(needsTriage) && needsTriage.length > 0 ? (
-            needsTriage.map((task: any) => (
+          {needsTriage.length > 0 ? (
+            needsTriage.map((task) => (
               <TaskCard key={task.id} task={task} />
             ))
           ) : (
@@ -104,8 +146,8 @@ function InboxContent() {
       <div>
         <h2 className="text-2xl font-semibold mb-4">High Priority Tasks</h2>
         <div className="space-y-4">
-          {Array.isArray(highPriority) && highPriority.length > 0 ? (
-            highPriority.map((task: any) => (
+          {highPriority.length > 0 ? (
+            highPriority.map((task) => (
               <TaskCard key={task.id} task={task} />
             ))
           ) : (
@@ -114,13 +156,5 @@ function InboxContent() {
         </div>
       </div>
     </div>
-  );
-}
-
-export default function InboxPage() {
-  return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <InboxContent />
-    </Suspense>
   );
 } 

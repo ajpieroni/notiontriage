@@ -7,5 +7,6 @@ export function getApiUrl(path: string) {
   }
   
   // Client-side
-  return path;
+  const port = window.location.port || '3000';
+  return `http://localhost:${port}${path}`;
 } 
