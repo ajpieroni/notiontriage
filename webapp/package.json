@@ -11,6 +11,7 @@
   "dependencies": {
     "@heroicons/react": "^2.1.1",
     "@notionhq/client": "^2.2.14",
+    "@tensorflow/tfjs": "^4.17.0",
     "autoprefixer": "^10.4.17",
     "date-fns": "^2.30.0",
     "date-fns-tz": "^2.0.0",
@@ -22,7 +23,10 @@
     "react-hook-form": "^7.50.1",
     "tailwindcss": "^3.4.1",
     "vercel": "^41.4.1",
-    "zod": "^3.22.4"
+    "zod": "^3.22.4",
+    "transformers": "^4.38.2",
+    "torch": "^2.2.0",
+    "numpy": "^1.26.4"
   },
   "devDependencies": {
     "@types/node": "^20.11.19",
