@@ -1,8 +1,9 @@
 import Link from 'next/link'
+import { getApiUrl } from '@/utils/api'
 
 async function getTasks() {
   try {
-    const res = await fetch(`${process.env.VERCEL_URL || 'http://localhost:3000'}/api/tasks`, {
+    const res = await fetch(getApiUrl('/api/tasks'), {
       cache: 'no-store'
     });
     if (!res.ok) throw new Error('Failed to fetch tasks');

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Client } from '@notionhq/client';
+import { getApiUrl } from '@/utils/api';
 
 interface FocusTaskProps {
   currentTask: any;
@@ -18,7 +18,7 @@ export default function FocusTask({ currentTask, setCurrentTask }: FocusTaskProp
 
   const fetchTasks = async () => {
     try {
-      const response = await fetch('/api/tasks?assigned_time_equals=false');
+      const response = await fetch(getApiUrl('/api/tasks?assigned_time_equals=false'));
       const data = await response.json();
       setTasks(data);
       setLoading(false);
@@ -32,7 +32,7 @@ export default function FocusTask({ currentTask, setCurrentTask }: FocusTaskProp
     if (!currentTask) return;
 
     try {
-      const response = await fetch(`/api/tasks/${currentTask.id}?action=complete`, {
+      const response = await fetch(getApiUrl(`/api/tasks/${currentTask.id}?action=complete`), {
         method: 'POST',
       });
 
